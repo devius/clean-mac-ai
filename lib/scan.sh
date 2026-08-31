@@ -221,12 +221,25 @@ cmai_git_age_days() {
 }
 
 # ---------------------------------------------------------------- large files
+# cmai_size_bytes <size-with-suffix> -- 500M -> 524288000
+cmai_to_bytes() {
+  printf '%s' "$1" | $AWK '
+    /[Gg]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1073741824; next }
+    /[Mm]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1048576; next }
+    /[Kk]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1024; next }
+    { printf "%.0f\n", $0+0 }'
+}
+
+# Large, long-unused files.
+#
+# Spotlight first: it has already indexed size and dates, so this returns in
+# about a second where walking a large home directory takes minutes. `find` is
+# the fallback for unindexed volumes, bounded in depth so it cannot run away.
 cmai_scan_large() {
-  local root="${OPT_ROOT:-$HOME}" f bytes days
-  $FIND "$root" -xdev \
-      \( -flags +dataless -prune \) -o \
-      \( -path "$HOME/Library/Mobile Documents" -prune \) -o \
-      \( -type f -size "+${OPT_MIN}" -print \) 2>/dev/null \
+  local root="${OPT_ROOT:-$HOME}" f bytes days minb
+  minb=$(cmai_to_bytes "$OPT_MIN")
+
+  _cmai_large_candidates "$root" "$minb" \
   | while IFS= read -r f; do
       [ -n "$f" ] || continue
       days=$(cmai_mtime_days "$f")
@@ -235,6 +248,22 @@ cmai_scan_large() {
       cmai_emit large large-file "$f" review trash full - \
         "At least $OPT_MIN and untouched for ${days} days. User data: shown so you can decide, never selected for you."
     done
+  return 0
+}
+
+_cmai_large_candidates() {
+  local root="$1" minb="$2"
+  if [ -x "$MDFIND" ] && [ -n "$($MDFIND -onlyin "$root" "kMDItemFSSize > $minb" 2>/dev/null | $AWK 'NR==1')" ]; then
+    $MDFIND -onlyin "$root" "kMDItemFSSize > $minb" 2>/dev/null | $AWK 'NR<=500'
+    return 0
+  fi
+  # Fallback. -maxdepth bounds the walk; Mobile Documents is pruned because
+  # traversing it can materialize iCloud downloads.
+  $FIND "$root" -xdev -maxdepth 6 \
+      \( -flags +dataless -prune \) -o \
+      \( -path "$HOME/Library/Mobile Documents" -prune \) -o \
+      \( -type f -size "+${OPT_MIN}" -print \) 2>/dev/null | $AWK 'NR<=500'
+  return 0
 }
 
 # ---------------------------------------------------------------- persistence
@@ -245,20 +274,29 @@ cmai_scan_agents() {
     $FIND "$d" -maxdepth 1 -name '*.plist' -type f 2>/dev/null | while IFS= read -r f; do
       [ -n "$f" ] || continue
       label=$($PLUTIL -extract Label raw -o - "$f" 2>/dev/null) || label=$($BASENAME "$f" .plist)
-      prog=$($PLUTIL -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null) \
-        || prog=$($PLUTIL -extract Program raw -o - "$f" 2>/dev/null) || prog=""
+      # Three spellings are in real use: Program, ProgramArguments[0], and
+      # BundleProgram for helpers shipped inside an app bundle.
+      prog=$($PLUTIL -extract Program raw -o - "$f" 2>/dev/null) \
+        || prog=$($PLUTIL -extract ProgramArguments.0 raw -o - "$f" 2>/dev/null) \
+        || prog=$($PLUTIL -extract BundleProgram raw -o - "$f" 2>/dev/null) || prog=""
+      case "$prog" in *'Could not extract'*|*'invalid key path'*) prog="" ;; esac
+
       if [ -n "$prog" ] && [ ! -e "$prog" ]; then
-        status="ORPHAN"; signed="target missing: $prog"
+        # The highest-value finding: the software is gone, its startup hook remains.
+        status="ORPHAN"; signed="target does not exist: $prog"
       elif [ -n "$prog" ]; then
-        if $CODESIGN -dv "$prog" >/dev/null 2>&1; then
-          signed=$($CODESIGN -dv "$prog" 2>&1 | $AWK -F= '/^Authority/{print $2; exit}')
-          [ -n "$signed" ] || signed="signed, authority unreadable"
+        # --verbose=4 is required. Plain `codesign -dv` never prints Authority,
+        # so parsing its output for one always yields nothing.
+        signed=$($CODESIGN -dv --verbose=4 "$prog" 2>&1 | $AWK -F= '/^Authority=/{print $2; exit}')
+        if [ -n "$signed" ]; then
+          status="signed"
+        elif $CODESIGN -dv "$prog" >/dev/null 2>&1; then
+          status="signed"; signed="signed, but no certificate authority (ad-hoc or self-signed)"
         else
-          signed="UNSIGNED"
+          status="UNSIGNED"; signed="no valid signature"
         fi
-        status="present"
       else
-        status="present"; signed="no program path in plist"
+        status="present"; signed="no program path in plist (MachServices-only helper)"
       fi
       printf '%s\tagent\t%s\t%s\t0\t-\t%s\t%s\tnone\treport\t-\tnone\t%s\t%s\t%s\n' \
         "$(cmai_id "$f")" "$($BASENAME "$d")" "$(cmai_tsv_safe "$f")" \
