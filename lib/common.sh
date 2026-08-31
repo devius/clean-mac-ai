@@ -41,6 +41,9 @@ CODESIGN=/usr/bin/codesign
 MDFIND=/usr/bin/mdfind
 SQLITE3=/usr/bin/sqlite3
 LAUNCHCTL=/bin/launchctl
+GIT=/usr/bin/git
+LSOF=/usr/sbin/lsof
+TOUCH=/usr/bin/touch
 PS=/bin/ps
 SYNC=/bin/sync
 
@@ -51,6 +54,16 @@ SYNC=/bin/sync
 : "${CMAI_ALLOW_OSASCRIPT:=1}"
 : "${CMAI_MIN_OS_MAJOR:=15}"
 : "${CMAI_NOISE_FLOOR:=67108864}" # 64 MiB: below this a df delta is noise
+
+# Per-project artifact scanning. Thresholds are idle-days before an artifact is
+# PRESELECTED; anything below is still shown and still tickable.
+: "${CMAI_PROJ_MIN:=52428800}"      # 50 MiB floor
+: "${CMAI_PROJ_T3_DAYS:=30}"        # pure derived cache
+: "${CMAI_PROJ_T1_DAYS:=60}"        # lockfile-backed
+: "${CMAI_PROJ_T2_DAYS:=120}"       # manifest only, versions may drift
+: "${CMAI_PROJ_ACTIVE_DAYS:=14}"    # idle days within which a project is "active"
+: "${CMAI_PROJ_FRESH_DAYS:=7}"      # artifact rebuilt this recently is not preselected
+: "${CMAI_PROJ_PARALLEL:=6}"        # du workers
 
 CMAI_VERSION="0.1.0"
 CMAI_TAB=$(printf '\t')

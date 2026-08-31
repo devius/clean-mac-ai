@@ -1,6 +1,6 @@
 ---
 name: clean-dev
-description: Reclaim disk space from developer toolchains on macOS by running each tool's own garbage collector rather than deleting files - Homebrew, npm, pnpm, yarn, Go module and build caches, Cargo, Docker and OrbStack, Xcode DerivedData and iOS DeviceSupport, simulators, Gradle, Maven, CocoaPods, pip and uv. Also finds stale node_modules, target, .venv and build directories in projects that have not been committed to in months. Use when a developer is out of disk space, or mentions Docker, node_modules, DerivedData, Xcode, Gradle, the Go module cache, or dev caches eating their drive.
+description: Reclaim disk space from developer toolchains and from build directories inside your own projects. Runs each tool's own garbage collector rather than deleting files - Homebrew, npm, pnpm, yarn, Go module and build caches, Cargo, Docker and OrbStack, Xcode DerivedData, simulators, Gradle, Maven, CocoaPods, pip and uv. Separately finds node_modules, .venv, target, build, dist, .next, .dart_tool and Pods inside projects, and refuses to touch anything in a project you are actively working on. Use when a developer is out of disk space, or mentions Docker, node_modules, DerivedData, Xcode, Gradle, the Go module cache, or dev caches eating their drive.
 argument-hint: "[tool]"
 allowed-tools: Bash(*/bin/cmai *), Bash(docker system df*), Bash(brew *), Bash(git *), Read, Glob, Grep, AskUserQuestion
 ---
@@ -28,9 +28,23 @@ structurally: contents-only rules can never remove the directory they name.
 
 ## Step 1: Scan
 
+Two separate scans, because they reclaim different things in different ways.
+
+**Global toolchain caches** - shared across every project on the machine:
+
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/cmai" scan dev --json
 ```
+
+**Per-project build and dependency directories** - the `node_modules`, `.venv`,
+`target`, `build` and `.next` inside your own projects:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/cmai" scan projects --json
+```
+
+The project scan walks your whole home directory, so it takes around 20 seconds.
+It is worth it: on a working machine this is usually the larger of the two.
 
 Records with `method` starting `gc:` are reclaimed by a collector. Records with
 `method` `trash` are moved to the Trash and are recoverable.
@@ -50,10 +64,42 @@ Present findings grouped by regeneration cost, because that is the real decision
 - **Judgement needed** - `project-build` entries. These are `node_modules`,
   `target`, `.venv` and similar in specific projects.
 
-For project entries, note that the age used for ranking is **the last git commit,
-not file mtime**. A checkout, a branch switch or a backup restore all bump
-mtimes without meaning the project is alive. A project with no commit in a year
-is a much safer candidate than one touched yesterday, and the scan reflects that.
+## How the project scan decides
+
+Three verdicts, and they mean exactly what the rest of the tool means by them.
+
+**`INFO` - protected.** Shown so you know where the space went, never actionable.
+A directory is protected when a process is running inside it, when it is tracked
+in git (that makes it source, not output), when a `.cmaikeep` marker covers it,
+when something wrote to it in the last day, or when it is a **dependency**
+directory in a project you are actively working on. That last rule is the point
+of the split: deleting `node_modules` from a project you are mid-sprint on costs
+you a reinstall, so it is refused; deleting that same project's `.next` costs
+only a rebuild, so it is offered.
+
+**`ASK` - offered, never selected for you.** Ambiguous names (`build`, `dist`,
+`out`, `target`, `vendor`) are always here regardless of age, because those
+names are also used for hand-written source. Build output in an active project
+is here too, along with anything in a repository with uncommitted changes or
+stashes.
+
+**`ALLOW` - preselected.** Unambiguous, over 50 MB, no veto, and idle past its
+tier: 30 days for a pure build cache, 60 for a dependency directory with a
+lockfile, 120 for one with only a manifest, since the versions that come back
+may differ.
+
+Idle time is the **maximum** of every signal available: last commit,
+`.git/logs/HEAD`, JetBrains project activation, VS Code recents, and manifest
+mtimes. Taking the maximum biases toward "active", which is the safe direction.
+`.git/index` is deliberately ignored - any IDE running `git status` in the
+background refreshes it, which made every project look active.
+
+Every row carries the exact command that restores it. Read that aloud when you
+present a candidate; it is what makes the deletion reversible in practice.
+
+To protect a project permanently, put an empty `.cmaikeep` file at its root. It
+also protects everything beneath it, so one marker can cover a whole clients
+directory.
 
 ## Step 3: Confirm, then reclaim
 
@@ -74,6 +120,13 @@ File-based candidates, by id from the scan:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/cmai" apply --ids a3f19c2b7e04,7c1d9048ab55 --apply
+```
+
+For project artifacts, add `--from projects` so only that scan is re-run to
+resolve the ids rather than all of them:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/cmai" apply --ids <ids> --from projects --apply
 ```
 
 Each collector is timed with a `df` sample around it, so the report says what
@@ -101,12 +154,19 @@ so before running them, not after.
 - **The active Xcode toolchain** (`xcode-select -p`).
 - **Live simulators.** Only `simctl delete unavailable` is offered, which removes
   runtimes macOS itself has already marked unusable.
-- **Source directories.** Only build outputs and caches are candidates.
+- **Source directories.** Only build outputs and caches are candidates, and
+  anything tracked in git is refused outright as source.
+- **Projects you are working in.** A running dev server, uncommitted changes or
+  a stash all protect a project's dependencies.
+- **Anything under `~/.vscode`, `~/.local`, `~/go` or `~/.npm`.** Those hold
+  installed software and global caches; a `dist` inside an installed extension
+  is part of that extension.
 
 ## Rules
 
 1. **Collector first, deletion second, never a raw removal.**
 2. **Empty the cache, keep the directory.** Enforced by the rule table.
-3. **Rank projects by commit age**, not mtime.
+3. **Never batch-approve an `ASK` row.** Ambiguous names are in that class
+   because `build` and `dist` are also used for source.
 4. **Say "irreversible" out loud** before running any collector.
 5. **Report the `df` delta**, and explain it when it disagrees with the estimate.

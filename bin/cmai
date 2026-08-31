@@ -23,6 +23,7 @@ export CMAI_PLUGIN_ROOT
 . "$CMAI_PLUGIN_ROOT/lib/restore.sh"
 . "$CMAI_PLUGIN_ROOT/lib/scan.sh"
 . "$CMAI_PLUGIN_ROOT/lib/scan_apps.sh"
+. "$CMAI_PLUGIN_ROOT/lib/scan_projects.sh"
 . "$CMAI_PLUGIN_ROOT/lib/gc.sh"
 . "$CMAI_PLUGIN_ROOT/lib/report.sh"
 
@@ -32,8 +33,10 @@ cmai -- clean-mac-ai: honest disk reclamation and maintenance for macOS.
 
   Read-only:
     preflight              what this machine permits (FDA, trash, snapshots, toolchains)
-    scan [space|dev|apps|agents|large|all]
+    scan [space|dev|projects|apps|agents|large|all]
                            find candidates; prints TSV, or JSONL with --json
+                           `projects` finds build and dependency directories
+                           inside your own projects
     doctor                 self-check: guard, denylist and tool availability
     runs                   list previous runs
     show <runid>           what a run did, grouped by whether it can be undone
@@ -50,7 +53,11 @@ cmai -- clean-mac-ai: honest disk reclamation and maintenance for macOS.
     --min <size>           scan-large: minimum size, e.g. 500M, 5G   [500M]
     --older-than <days>    scan-large: untouched for at least N days [180]
     --tier strict|enhanced|deep    scan-apps match sensitivity       [strict]
-    --root <path>          scan-large / scan-dev: where to look      [$HOME]
+    --root <path>          scan-large / scan-projects: where to look  [$HOME]
+    --include-active       scan-projects: also consider dependency directories
+                           in projects you are actively working on
+    --min-size <size>      scan-projects: minimum artifact size        [50M]
+    --from <target>        apply --ids: which scan resolves the ids    [all]
 
   Environment:
     CMAI_ROOT              manifests and quarantine        [~/.clean-mac-ai]
@@ -67,6 +74,7 @@ VERB="${1:-}"; [ $# -gt 0 ] && shift
 OPT_JSON=0; OPT_IDS=""; OPT_RUN=""; OPT_MIN="500M"; OPT_DAYS=180
 OPT_TIER="strict"; OPT_ROOT="$HOME"; OPT_LENS="security"
 OPT_TARGET="all"; OPT_TOOL="all"; OPT_APP=""
+OPT_INCLUDE_ACTIVE=0; OPT_MINSIZE=""; OPT_DAYS_SET=""; OPT_FROM="all"
 
 # A bare word after the verb is its target: `cmai scan dev`, `cmai gc brew`.
 case "${1:-}" in
@@ -82,17 +90,21 @@ while [ $# -gt 0 ]; do
     --ids)        OPT_IDS="${2:-}"; shift ;;
     --run)        OPT_RUN="${2:-}"; shift ;;
     --min)        OPT_MIN="${2:-}"; shift ;;
-    --older-than) OPT_DAYS="${2:-}"; shift ;;
+    --older-than) OPT_DAYS="${2:-}"; OPT_DAYS_SET=1; shift ;;
     --tier)       OPT_TIER="${2:-}"; shift ;;
     --root)       OPT_ROOT="${2:-}"; shift ;;
     --lens)       OPT_LENS="${2:-}"; shift ;;
     --app)        OPT_APP="${2:-}"; shift ;;
+    --include-active) OPT_INCLUDE_ACTIVE=1 ;;
+    --min-size)   OPT_MINSIZE="${2:-}"; shift ;;
+    --from)       OPT_FROM="${2:-}"; shift ;;
     -h|--help)    usage; exit 0 ;;
     *)            cmai_die "unknown option: $1 (try: cmai --help)" ;;
   esac
   shift
 done
 export CMAI_DRY_RUN OPT_JSON OPT_TIER OPT_ROOT OPT_MIN OPT_DAYS OPT_LENS OPT_APP
+export OPT_INCLUDE_ACTIVE OPT_MINSIZE OPT_DAYS_SET OPT_FROM
 
 case "$VERB" in
   ''|-h|--help|help) usage; exit 0 ;;
@@ -119,7 +131,7 @@ case "$VERB" in
     [ -n "$OPT_IDS" ] || cmai_die "apply needs --ids <id,id,...>"
     cmai_os_gate; cmai_preflight >/dev/null
     cmai_manifest_open >/dev/null
-    cmai_apply_ids "$OPT_IDS"
+    cmai_apply_ids "$OPT_IDS" "$OPT_FROM"
     cmai_manifest_close
     cmai_report_run "$CMAI_RUNID"
     ;;

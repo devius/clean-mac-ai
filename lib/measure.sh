@@ -56,6 +56,19 @@ cmai_mtime_days() {
   $AWK -v a="$now" -v b="$m" 'BEGIN { printf "%d\n", int((a-b)/86400) }'
 }
 
+# cmai_birth_days <path> -- whole days since creation, or -1.
+#
+# Birthtime is genuine on APFS and is the one timestamp that reliably says
+# "this was made recently". A build directory created in the last day almost
+# always means a build is running right now.
+cmai_birth_days() {
+  local b now
+  b=$($STAT -f '%B' "$1" 2>/dev/null) || { printf '%s\n' -1; return 0; }
+  [ -n "$b" ] || { printf '%s\n' -1; return 0; }
+  now=$($DATE +%s)
+  $AWK -v a="$now" -v b="$b" 'BEGIN { printf "%d\n", int((a-b)/86400) }'
+}
+
 # cmai_mtime_iso <path> -- last-modified date as YYYY-MM-DD, or "-".
 cmai_mtime_iso() {
   $STAT -f '%Sm' -t '%Y-%m-%d' "$1" 2>/dev/null || printf '%s\n' -

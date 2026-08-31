@@ -49,11 +49,18 @@ cmai_report_run() {
 # Ids come from a prior scan. The scan is re-run so that sizes and guard
 # verdicts are current: acting on a stale scan is how a cleaner deletes
 # something the user started using ten minutes ago.
+# cmai_apply_ids <ids> [scan-target]
+#
+# The scan is re-run so sizes and guard verdicts are current: acting on a stale
+# scan is how a cleaner deletes something the user started using ten minutes
+# ago. The target narrows which scan resolves the ids, because a full rescan to
+# act on one project artifact is a poor trade. Safety is unaffected either way:
+# cmai_reclaim_one calls guard_path again at the moment of action.
 cmai_apply_ids() {
-  local ids="$1" line id path mode method undo
+  local ids="$1" from="${2:-all}" line id path mode method undo
   local want; want=$(printf '%s' "$ids" | $TR ',' '\n' | $GREP -v '^$')
 
-  _cmai_scan_run all | while IFS=$'\t' read -r id _cat _sub path _bytes _human _risk verdict mode method undo _needs _owner _last _why; do
+  _cmai_scan_run "$from" | while IFS=$'\t' read -r id _cat _sub path _bytes _human _risk verdict mode method undo _needs _owner _last _why; do
     [ -n "$(printf '%s' "$want" | $GREP -x "$id")" ] || continue
     case "$verdict" in
       DENY) cmai_warn "refused (protected): $path"; continue ;;

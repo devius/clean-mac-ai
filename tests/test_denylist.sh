@@ -66,5 +66,32 @@ ck "$HOME/Library/Mobile Documents/x"                         DENY
 ck "/bin/sh"                                                  DENY
 ck "/System/Library/Frameworks"                               DENY
 
+# --- project artifact name rules -------------------------------------------
+# One assertion per ALLOWNAME/ASKNAME row. lint.sh gate 8b requires this: a name
+# rule matches a basename ANYWHERE, so each one needs a verdict on record.
+P="$HOME/Development/proj"
+for n in node_modules .next .turbo .nuxt Pods .svelte-kit .astro .angular \
+         .parcel-cache .dart_tool .gradle .stack-work dist-newstyle \
+         DerivedData Carthage Intermediate DerivedDataCache \
+         cmake-build-debug cmake-build-release cmake-build-relwithdebinfo \
+         cmake-build-minsizerel; do
+  ck "$P/$n" ALLOW
+done
+for n in target build .venv venv dist out vendor deps _build obj; do
+  ck "$P/$n" ASK
+done
+
+# --- the reserved-name footgun ---------------------------------------------
+# `ALLOWNAME Library` would resolve $HOME/Library itself to ALLOW: no DENY
+# prefix covers it, and a length-0 name rule beats deny_len of -1. Verified
+# live. These assert the rule was never added, and that a protected tree still
+# wins over a name rule wherever one legitimately applies.
+ck "$HOME/Library"                                            DENY
+ck "$HOME/Library/Caches/SomeApp/node_modules"                ALLOW
+ck "$HOME/Library/Group Containers/x/node_modules"            DENY
+ck "$HOME/Library/Keychains/dist"                             DENY
+ck "/System/Library/dist"                                     DENY
+ck "$HOME/Library/Mobile Documents/proj/.next"                DENY
+
 printf 'test_denylist: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

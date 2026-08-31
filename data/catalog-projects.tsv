@@ -1,0 +1,69 @@
+# catalog-projects.tsv -- per-project build and dependency directories.
+#
+# Distinct from catalog-dev.tsv, which lists GLOBAL tool caches at fixed paths.
+# These are names that appear inside individual projects, wherever those live.
+#
+# Columns (9, tab-separated):
+#   name      basename `find -name` matches. Literal only: _guard_eval_rules
+#             compares name rules with `base == pat`, so globs cannot be used.
+#   class     deps | build | cache
+#             `deps` costs a reinstall to restore, so it is PROTECTED while a
+#             project is active. `build`/`cache` regenerate from source alone
+#             and are offered even in an active project, never preselected.
+#   tier      T1 lockfile-backed | T2 manifest-only | T3 pure derived.
+#             Nominal: a T1 row whose lockfile is absent is recomputed as T2.
+#   ambig     1 = the name is also used for source directories, so this is
+#             never preselected at any age. See docs/PROJECTS.md.
+#   manifest  comma-separated patterns expected at the project root; - if none
+#   lockfile  comma-separated lockfile names; - if none
+#   inmarker  path RELATIVE TO THE ARTIFACT proving it is that tool's output
+#   restore   the exact command that regenerates it. Goes verbatim into evidence.
+#   why       prose lead-in for the evidence sentence
+#
+# Two names are deliberately absent from the guard's rule table and can only
+# ever be reported, never offered:
+#   Library  -- ALLOWNAME Library resolves $HOME/Library to ALLOW, because no
+#              DENY prefix covers it and a length-0 name rule beats deny_len -1.
+#              Verified. Unity's import cache cannot be expressed safely.
+#   bin      -- technically safe, but bin/ holds hand-written scripts in a
+#              large fraction of repositories.
+
+# name	class	tier	ambig	manifest	lockfile	inmarker	restore	why
+node_modules	deps	T1	0	package.json	package-lock.json,pnpm-lock.yaml,yarn.lock,bun.lock,bun.lockb	-	npm ci	Node package directory, restored from the lockfile.
+.next	cache	T3	0	package.json	-	-	npx next build	Next.js build output and incremental cache.
+.nuxt	cache	T3	0	nuxt.config.ts,nuxt.config.js	-	-	npx nuxt build	Nuxt build output.
+.svelte-kit	cache	T3	0	svelte.config.js	-	-	npx vite build	SvelteKit generated types and build output.
+.turbo	cache	T3	0	turbo.json	-	-	npx turbo run build	Turborepo task cache.
+.astro	cache	T3	0	astro.config.mjs,astro.config.ts	-	-	npx astro build	Astro generated types and build output.
+.angular	cache	T3	0	angular.json	-	-	npx ng build	Angular CLI build cache.
+.parcel-cache	cache	T3	0	package.json	-	-	npx parcel build	Parcel bundler cache.
+.venv	deps	T1	0	pyproject.toml,requirements.txt,setup.py	uv.lock,poetry.lock,Pipfile.lock,requirements.txt	pyvenv.cfg	uv sync	Python virtual environment. Not relocatable: if the project moved, this is already broken.
+venv	deps	T2	1	requirements.txt,setup.py	requirements.txt	pyvenv.cfg	python3 -m venv venv && pip install -r requirements.txt	Python virtual environment under a generic name.
+Pods	deps	T1	0	Podfile	Podfile.lock	Manifest.lock	pod install	CocoaPods checkout, pinned by Podfile.lock.
+Carthage	deps	T1	0	Cartfile	Cartfile.resolved	Build	carthage bootstrap --use-xcframeworks	Carthage build products.
+.dart_tool	cache	T3	0	pubspec.yaml	pubspec.lock	package_config.json	flutter pub get	Dart and Flutter package config and build cache.
+.gradle	cache	T3	0	build.gradle,build.gradle.kts,settings.gradle	-	-	./gradlew build	Project-local Gradle task cache, distinct from ~/.gradle.
+target	build	T1	1	Cargo.toml	Cargo.lock	CACHEDIR.TAG	cargo build	Cargo build directory, marked regenerable by its own CACHEDIR.TAG.
+target	build	T2	1	pom.xml	-	-	mvn package	Maven build directory.
+# `build` is per-ecosystem: a Flutter project has no CMakeCache.txt, and
+# reporting one as missing would be misleading rather than informative.
+# _cmai_proj_catalog_row picks the row whose manifest is actually present.
+build	build	T3	1	pubspec.yaml	pubspec.lock	-	flutter build	Flutter build output. The name is also used for sources, so it is never preselected.
+build	build	T3	1	build.gradle,build.gradle.kts,settings.gradle	-	-	./gradlew build	Gradle build output. The name is also used for sources, so it is never preselected.
+build	build	T3	1	CMakeLists.txt,meson.build	-	CMakeCache.txt	cmake --build build	CMake build directory. The name is also used for sources, so it is never preselected.
+build	build	T2	1	package.json,pyproject.toml,setup.py	-	-	npm run build	Build output. The name is also used for sources, so it is never preselected.
+dist	build	T2	1	package.json,pyproject.toml,setup.py	-	-	npm run build	Distribution output. Frequently committed as a vendored library, so tracked copies are refused outright.
+out	build	T2	1	next.config.js,next.config.ts,package.json	-	-	npx next build	Static export output. Also used for experiment results in data projects.
+vendor	deps	T2	1	composer.json,go.mod	composer.lock,go.sum	composer/installed.json	composer install	Vendored dependencies. Go and PHP projects commit this deliberately, so tracked copies are refused.
+deps	deps	T1	1	mix.exs	mix.lock	-	mix deps.get	Elixir dependency checkout.
+_build	build	T2	1	mix.exs,dune-project	mix.lock	-	mix compile	Elixir or Dune build output.
+.stack-work	build	T3	0	stack.yaml	stack.yaml.lock	-	stack build	Haskell Stack build output.
+dist-newstyle	build	T3	0	cabal.project	-	-	cabal build	Cabal v2 build output.
+cmake-build-debug	build	T3	0	CMakeLists.txt	-	CMakeCache.txt	cmake --build .	CLion CMake build directory.
+cmake-build-release	build	T3	0	CMakeLists.txt	-	CMakeCache.txt	cmake --build .	CLion CMake build directory.
+cmake-build-relwithdebinfo	build	T3	0	CMakeLists.txt	-	CMakeCache.txt	cmake --build .	CLion CMake build directory.
+cmake-build-minsizerel	build	T3	0	CMakeLists.txt	-	CMakeCache.txt	cmake --build .	CLion CMake build directory.
+obj	build	T3	1	packages.lock.json	packages.lock.json	-	dotnet build	.NET intermediate output under a generic name.
+DerivedData	cache	T3	0	-	-	-	Build in Xcode	Project-local Xcode DerivedData.
+Intermediate	cache	T3	0	-	-	-	Rebuild in Unreal Editor	Unreal Engine intermediate build files.
+DerivedDataCache	cache	T3	0	-	-	-	Rebuild in Unreal Editor	Unreal Engine derived data cache.

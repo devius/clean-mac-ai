@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- `cmai scan projects`: build and dependency directories inside your own
+  projects, discovered across the whole home directory in one pruned traversal.
+- Active projects are protected. A running process (collected system-wide with
+  one `lsof` call), uncommitted changes, a stash, or recent activity in git or
+  an IDE all mark a project active. Dependency directories are refused there;
+  build output is still offered but never preselected.
+- A git-tracked artifact directory is refused at any age: tracked means source.
+- Tiered preselection: 30 days for a pure build cache, 60 for a lockfile-backed
+  dependency directory, 120 with only a manifest. Ambiguous names (`build`,
+  `dist`, `out`, `target`, `vendor`) are never preselected.
+- `.cmaikeep` at a project root, or any ancestor, excludes it permanently.
+- Every row carries the exact command that restores it.
+- New lint gate: a name rule may not collide with a reserved directory name.
+  `ALLOWNAME Library` would have resolved `$HOME/Library` to ALLOW.
+- Fixed: `cmai_app_rule` substring-matched every path, so a project under a
+  directory named after a vendor had its risk and explanation replaced.
+
 ## 0.1.0
 
 First release.

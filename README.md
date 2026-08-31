@@ -54,7 +54,7 @@ Six skills, each owning one job:
 | Skill | Job |
 |---|---|
 | `/clean-mac` | Where your space went. Scans everything, explains it, routes. Never deletes. |
-| `/clean-dev` | Toolchain caches via `brew cleanup`, `docker builder prune`, `go clean`, and friends. Stale `node_modules` ranked by last commit. |
+| `/clean-dev` | Toolchain caches via `brew cleanup`, `docker builder prune`, `go clean`, and friends. Plus per-project `node_modules`, `.venv`, `target`, `build` and `.next` — protected in projects you're actively working on. |
 | `/clean-space` | Caches per application, stale downloads, installers, large and long-unused files. |
 | `/clean-apps` | Full uninstall with leftovers, and orphans from apps already gone. |
 | `/clean-guard` | Launch agents, login items, orphaned persistence, security posture. |
@@ -65,6 +65,7 @@ There is also a plain CLI, usable without Claude:
 ```bash
 cmai preflight              # what this machine permits
 cmai scan all --json        # find candidates, read-only
+cmai scan projects          # build dirs inside your own projects
 cmai gc docker --apply      # run a toolchain's own collector
 cmai apply --ids a3f,7c1    # reclaim specific items
 cmai restore --run <id>     # put it back
@@ -90,6 +91,16 @@ Homebrew's cache directory. That is not a style preference: CleanMyMac deleted
 the cache *directory* rather than its contents and broke `brew doctor` until
 Homebrew patched itself to recreate it ([Homebrew/brew#5083](https://github.com/Homebrew/brew/issues/5083)).
 Contents-only rules here can never remove the directory they name.
+
+**It will not touch a project you're working on.** The per-project scan collects
+every running process's working directory in one call, reads JetBrains and VS
+Code recents, and takes the *maximum* of every activity signal — so a dev server,
+an uncommitted change, or a checkout last week all protect a project. Dependency
+directories like `node_modules` are refused outright in an active project because
+restoring one costs a reinstall; that same project's `.next` is still offered,
+because it costs only a rebuild. A directory tracked in git is refused at any
+age, since that makes it source rather than output. Drop an empty `.cmaikeep` in
+a project to exclude it permanently.
 
 **It knows your machine, not just your directories.** The scan is input to
 reasoning, not the output. Instead of "Caches: 8.5 GB" you get: your
@@ -121,7 +132,8 @@ swap and the sleep image, Keychains, `~/.ssh`, `~/Library/Group Containers`
 backups, Xcode Archives, iCloud placeholders, and logs.
 
 Full detail in [docs/SAFETY.md](docs/SAFETY.md), including an honest list of
-what the test suite **cannot** cover.
+what the test suite **cannot** cover, and [docs/PROJECTS.md](docs/PROJECTS.md)
+for how the per-project scan decides what is safe.
 
 ## Requirements
 

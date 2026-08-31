@@ -15,18 +15,35 @@ cmai_scan_header() {
 
 # One record. Runs the candidate through the guard so that `verdict` in the
 # output is the real answer, not a guess the reclaim step might contradict.
+# cmai_emit <cat> <sub> <path> <risk> <method> <undo> <owner> <evidence>
+#           [floor] [bytes]
+#
+#   floor  "ask" raises an ALLOW verdict to ASK. It may only ever weaken a
+#          verdict: a caller cannot grant an ALLOW the guard did not give, and
+#          a DENY is never softened.
+#   bytes  a size the caller already measured. The project scan sizes every
+#          candidate in one parallel du pass, and re-measuring here would
+#          double the most expensive phase of the scan for no new information.
 cmai_emit() {
   local cat="$1" sub="$2" path="$3" risk="$4" method="$5" undo="$6" owner="$7" why="$8"
+  local floor="${9:-}" pre="${10:-}"
   local bytes human gline grc verdict mode needs last id
 
   [ -e "$path" ] || return 0
-  bytes=$(cmai_size_fast "$path")
+  if [ -n "$pre" ]; then bytes="$pre"; else bytes=$(cmai_size_fast "$path"); fi
   [ "${bytes:-0}" -gt 0 ] || return 0
 
   # An application exception downgrades the risk and replaces the explanation:
   # this is where "cache" turns out to mean "the user's offline music".
-  local rule rrisk rnote
-  rule=$(cmai_app_rule "$path")
+  # app-rules.tsv keys are bundle-id and vendor fragments, meaningful only under
+  # ~/Library where a path component genuinely is a bundle id. Applied to an
+  # arbitrary project path the substring match false-fires: a project at
+  # ~/Development/AdobeXD-plugin/dist matches the "Adobe" rule and would be
+  # described to the user as Adobe's media cache.
+  local rule="" rrisk rnote
+  case "$path" in
+    "$HOME"/Library/*) rule=$(cmai_app_rule "$path") ;;
+  esac
   if [ -n "$rule" ]; then
     rrisk=$(printf '%s' "$rule" | $AWK -F'\t' '{print $1}')
     rnote=$(printf '%s' "$rule" | $AWK -F'\t' '{print $2}')
@@ -52,6 +69,15 @@ cmai_emit() {
   # table would have allowed it; the guard's DENY is never softened here.
   if [ "$risk" = risky ] && [ "$verdict" = ALLOW ]; then
     verdict=ASK
+  fi
+  # Same one-way rule for a caller-supplied floor. "info" marks a row that is
+  # reported for visibility but is never actionable, which is what a protected
+  # project artifact is: the user should see where the space went and why it is
+  # refused, without it ever appearing selectable.
+  if [ "$floor" = ask ] && [ "$verdict" = ALLOW ]; then
+    verdict=ASK
+  elif [ "$floor" = info ]; then
+    verdict=INFO
   fi
 
   human=$(cmai_human "$bytes")
@@ -170,7 +196,6 @@ cmai_scan_dev() {
     path=$(cmai_expand_home "$path")
     cmai_emit dev "$sub" "$path" safe "$method" "$undo" "$tool" "$why"
   done < "$CMAI_DATA_DIR/catalog-dev.tsv"
-  cmai_scan_projects
 }
 
 # Docker reports its own reclaimable bytes; asking the daemon beats guessing
@@ -189,36 +214,9 @@ cmai_scan_docker() {
     "$why Docker reports ${rec:-an unknown amount} reclaimable."
 }
 
-# Build directories inside projects, ranked by how long the project has been
-# untouched. Git commit date beats file mtime: a checkout, a branch switch or a
-# backup restore all bump mtimes without meaning the project is alive.
-cmai_scan_projects() {
-  local root="${OPT_ROOT:-$HOME}" d proj age bytes marker
-  for marker in node_modules target .next .venv venv Pods build .turbo; do
-    $FIND "$root" -xdev -maxdepth 5 -type d -name "$marker" -prune -print 2>/dev/null
-  done | while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    proj=$($DIRNAME "$d")
-    age=$(cmai_git_age_days "$proj")
-    [ "$age" -lt 0 ] && age=$(cmai_mtime_days "$proj")
-    [ "$age" -lt 90 ] && continue
-    bytes=$(cmai_size_fast "$d")
-    [ "${bytes:-0}" -gt 52428800 ] || continue
-    cmai_emit dev project-build "$d" safe trash rebuildable "$($BASENAME "$proj")" \
-      "Build directory in a project with no commit for ${age} days. Regenerated from the project's lockfile or build system."
-  done
-}
-
-# Days since the last commit, or -1 when this is not a git repository.
-cmai_git_age_days() {
-  local ts now
-  [ -d "$1/.git" ] || { printf '%s\n' -1; return 0; }
-  command -v git >/dev/null 2>&1 || { printf '%s\n' -1; return 0; }
-  ts=$(git -C "$1" log -1 --format=%ct 2>/dev/null) || ts=""
-  [ -n "$ts" ] || { printf '%s\n' -1; return 0; }
-  now=$($DATE +%s)
-  $AWK -v a="$now" -v b="$ts" 'BEGIN { printf "%d\n", int((a-b)/86400) }'
-}
+# Per-project build and dependency directories live in lib/scan_projects.sh.
+# `scan dev` deliberately does not call it: that scan is the fast toolchain-cache
+# pass, and project discovery walks the whole home directory.
 
 # ---------------------------------------------------------------- large files
 # cmai_size_bytes <size-with-suffix> -- 500M -> 524288000
@@ -315,12 +313,13 @@ cmai_scan_agents() {
 _cmai_scan_run() {
   case "$1" in
     space)  cmai_scan_space ;;
-    dev)    cmai_scan_dev ;;
+    dev)      cmai_scan_dev ;;
+    projects) cmai_scan_projects ;;
     large)  cmai_scan_large ;;
     agents) cmai_scan_agents ;;
     apps)   cmai_scan_apps ;;
-    all)    cmai_scan_space; cmai_scan_dev; cmai_scan_agents ;;
-    *)      cmai_die "unknown scan target: $1 -- expected space, dev, apps, agents, large or all" ;;
+    all)      cmai_scan_space; cmai_scan_dev; cmai_scan_projects; cmai_scan_agents ;;
+    *)      cmai_die "unknown scan target: $1 -- expected space, dev, projects, apps, agents, large or all" ;;
   esac
 }
 

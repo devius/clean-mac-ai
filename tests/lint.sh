@@ -91,6 +91,32 @@ if [ "$missing" -gt 0 ]; then
   bad "$missing deny rule(s) have no corresponding test"
 else ok "every deny rule is covered by a test"; fi
 
+# 8b. a name rule must not collide with a reserved directory name ------------
+# ALLOWNAME/ASKNAME match a BASENAME anywhere and carry length 0. That still
+# beats deny_len of -1, so `ALLOWNAME Library` resolves $HOME/Library itself to
+# ALLOW -- there is no DENY prefix covering it, and depth 3 clears mindepth 3.
+# Verified against the live rule table. Gate 8 only checks DENY rules, so
+# without this the entire permissive surface is ungated.
+RESERVED="Library Applications Documents Desktop Downloads Movies Music Pictures
+Public Users Volumes System Containers Keychains Preferences Caches Logs
+bin sbin usr etc var tmp private opt dev home root"
+missing=0
+while IFS=$'\t' read -r kind pat _rest; do
+  case "$kind" in ALLOWNAME|ASKNAME) ;; *) continue ;; esac
+  for r in $RESERVED; do
+    if [ "$pat" = "$r" ]; then
+      printf '  name rule %s collides with reserved directory name\n' "$pat" >&2
+      missing=$((missing+1))
+    fi
+  done
+  /usr/bin/grep -qF "$pat" tests/cases-guard.tsv tests/test_denylist.sh 2>/dev/null && continue
+  printf '  name rule %s has no case in tests/cases-guard.tsv or tests/test_denylist.sh\n' "$pat" >&2
+  missing=$((missing+1))
+done < <(/usr/bin/grep -v '^#' data/denylist.tsv)
+if [ "$missing" -gt 0 ]; then
+  bad "$missing name-rule problem(s)"
+else ok "name rules are safe and covered"; fi
+
 # 9. shellcheck, when available ----------------------------------------------
 if command -v shellcheck >/dev/null 2>&1; then
   # SC1090/SC1091: dynamic `source` paths are how the dispatcher composes itself.
