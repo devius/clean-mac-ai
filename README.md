@@ -7,7 +7,7 @@ actually there, reclaims it the way each tool intends, tells you the truth about
 what it freed, and refuses to do the things that do not work.
 
 ```
-/plugin marketplace add davidmachakhelidze/clean-mac-ai
+/plugin marketplace add devius/clean-mac-ai
 /plugin install clean-mac-ai
 ```
 

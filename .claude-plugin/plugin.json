@@ -4,10 +4,10 @@
   "description": "An honest CleanMyMac alternative for Claude Code. Finds where your disk space actually went, reclaims it with each toolchain's own garbage collector, and refuses the maintenance theater that other Mac cleaners sell.",
   "author": {
     "name": "David Machakhelidze",
-    "url": "https://github.com/davidmachakhelidze"
+    "url": "https://github.com/devius"
   },
-  "homepage": "https://github.com/davidmachakhelidze/clean-mac-ai",
-  "repository": "https://github.com/davidmachakhelidze/clean-mac-ai",
+  "homepage": "https://github.com/devius/clean-mac-ai",
+  "repository": "https://github.com/devius/clean-mac-ai",
   "license": "MIT",
   "keywords": [
     "macos", "disk-space", "cleanup", "cleanmymac", "uninstaller",

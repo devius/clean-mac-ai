@@ -2,7 +2,7 @@
   "name": "clean-mac-ai",
   "owner": {
     "name": "David Machakhelidze",
-    "url": "https://github.com/davidmachakhelidze"
+    "url": "https://github.com/devius"
   },
   "metadata": {
     "description": "An honest Mac cleaner for Claude Code: real measurement, trash-first removal, full undo, and a documented refusal to do the things that do not work.",
