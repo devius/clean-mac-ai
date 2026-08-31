@@ -17,12 +17,15 @@ Pure bash 3.2 plus system tools. No Python, Node, or Homebrew dependency.
 tests/run.sh                        # lint + every test (this is the gate)
 tests/lint.sh                       # invariants + shellcheck only
 tests/test_guard.sh                 # a single suite; each test_*.sh runs standalone
+tests/mkproj.sh                     # project fixtures; backdates artifacts AND manifests,
+                                    # or every fixture reads as active
 
 CMAI_I_UNDERSTAND=yes tests/soak.sh # end-to-end against the REAL Trash; opt-in
 
 ./bin/cmai preflight                # what this machine permits
 ./bin/cmai doctor                   # self-check; guard must refuse /, /System, /usr, $HOME
 ./bin/cmai scan all --json          # read-only
+./bin/cmai scan projects            # per-project artifacts (~20s, walks $HOME)
 ./bin/cmai apply --ids a3f,7c1      # dry-run; add --apply to act
 ./bin/cmai gc docker --apply        # a toolchain's own collector
 ./bin/cmai restore --run <runid> --apply
@@ -59,6 +62,38 @@ enabling a new location is a two-key operation:
 3. add a test — `tests/lint.sh` fails the build if a `DENY` rule has no case in
    `tests/cases-guard.tsv` or `tests/test_denylist.sh`.
 
+### Per-project artifacts (`lib/scan_projects.sh`)
+
+`cmai scan projects` is separate from `scan dev`: the latter reclaims global
+tool caches at fixed paths, the former finds artifacts inside the user's own
+projects anywhere under `$HOME`. `data/catalog-projects.tsv` is its taxonomy.
+
+Three things are load-bearing and non-obvious:
+
+- **Discovery is one traversal.** Exclusions are pruned first without printing;
+  markers are `-print0 -prune`, so a marker is emitted *and* not descended.
+  Adding `node_modules` to the marker group makes the scan faster, not slower,
+  because the walk stops at the top of the biggest trees. A per-marker loop
+  finds 1744 `dist` directories where only 36 are real.
+- **Two filters, both required.** Skip dotted directories directly under `$HOME`
+  plus every `catalog-dev.tsv` path (`~/go` is not a dotdir), then require a
+  manifest or `.git` beside the artifact. Without them the scan reports
+  installed software: 891 of 1055 candidates here were VS Code extensions,
+  Neovim plugins and the Go module cache.
+- **`deps` versus `build`/`cache` decides the active-project rule.** A
+  dependency directory in an active project is refused because restoring it
+  costs a reinstall; build output is still offered because it costs a rebuild.
+
+Verdicts reuse the guard's vocabulary exactly: `ALLOW` preselect, `ASK` offered,
+`INFO` reported but never actionable. Protected rows pass `floor=info` to
+`cmai_emit`, which may only ever weaken a verdict.
+
+Activity signals worth knowing: `.git/index` is **not** used (an IDE running
+`git status` refreshes it, so it read 0 days for repos last committed 53 and 195
+days ago); `atime` is not updated on read on APFS; unpushed commits are reported
+but do not veto, since they live in `.git` and are not at risk from deleting
+build output.
+
 ### Rule precedence (`lib/denylist.sh`)
 
 Deny and allow are evaluated **independently**, then combined. A permissive rule
@@ -68,6 +103,13 @@ vulnerability, since `*/node_modules` is 15 characters and `/System` is 7.
 
 `ALLOWNAME`/`ASKNAME` match a basename anywhere and carry length 0, so they can
 never override a deny; a `node_modules` inside a protected tree stays protected.
+
+**A name rule must never use a reserved directory name.** `ALLOWNAME Library`
+resolves `$HOME/Library` itself to `ALLOW` — no deny prefix covers it, and
+length 0 still beats a non-match of -1. Verified against the live table. Lint
+gate 8b rejects that and every other reserved name, and requires each name rule
+to have a case in `cases-guard.tsv` or `test_denylist.sh`. Gate 8 only covers
+`DENY` rules, so without 8b the whole permissive surface is ungated.
 
 `CHILDREN` (contents-only) applies to the directory the rule *names exactly*.
 Below it the mode is `self`, otherwise every child would be judged a directory
