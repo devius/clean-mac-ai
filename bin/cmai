@@ -1,0 +1,142 @@
+#!/bin/bash
+# cmai -- clean-mac-ai. The single entry point.
+#
+# Everything that inspects or changes the system goes through this dispatcher,
+# so the safety kernel in lib/guard.sh cannot be bypassed by a caller that
+# forgot about it.
+#
+# Dry-run is the default. Only an explicit --apply clears it, and no
+# configuration file can change that default.
+
+set -uo pipefail
+
+CMAI_PLUGIN_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export CMAI_PLUGIN_ROOT
+
+. "$CMAI_PLUGIN_ROOT/lib/common.sh"
+. "$CMAI_PLUGIN_ROOT/lib/denylist.sh"
+. "$CMAI_PLUGIN_ROOT/lib/guard.sh"
+. "$CMAI_PLUGIN_ROOT/lib/measure.sh"
+. "$CMAI_PLUGIN_ROOT/lib/preflight.sh"
+. "$CMAI_PLUGIN_ROOT/lib/manifest.sh"
+. "$CMAI_PLUGIN_ROOT/lib/reclaim.sh"
+. "$CMAI_PLUGIN_ROOT/lib/restore.sh"
+. "$CMAI_PLUGIN_ROOT/lib/scan.sh"
+. "$CMAI_PLUGIN_ROOT/lib/scan_apps.sh"
+. "$CMAI_PLUGIN_ROOT/lib/gc.sh"
+. "$CMAI_PLUGIN_ROOT/lib/report.sh"
+
+usage() {
+  cat <<'USAGE'
+cmai -- clean-mac-ai: honest disk reclamation and maintenance for macOS.
+
+  Read-only:
+    preflight              what this machine permits (FDA, trash, snapshots, toolchains)
+    scan [space|dev|apps|agents|large|all]
+                           find candidates; prints TSV, or JSONL with --json
+    doctor                 self-check: guard, denylist and tool availability
+    runs                   list previous runs
+    show <runid>           what a run did, grouped by whether it can be undone
+    myths                  what this tool refuses to do, and why
+
+  Changes the system (dry-run unless --apply is given):
+    apply --ids <a,b,..>   reclaim the listed scan ids
+    gc <tool>              run a toolchain's own garbage collector
+    restore --run <runid>  put back what can be put back
+
+  Options:
+    --json                 JSONL output instead of TSV
+    --apply                actually do it (default is dry-run)
+    --min <size>           scan-large: minimum size, e.g. 500M, 5G   [500M]
+    --older-than <days>    scan-large: untouched for at least N days [180]
+    --tier strict|enhanced|deep    scan-apps match sensitivity       [strict]
+    --root <path>          scan-large / scan-dev: where to look      [$HOME]
+
+  Environment:
+    CMAI_ROOT              manifests and quarantine        [~/.clean-mac-ai]
+    CMAI_TRASH_BACKEND     auto | trash | finder | quarantine
+    CMAI_DENYLIST          override the rule table (tests only)
+
+Nothing is deleted without --apply, and nothing is deleted that the rule table
+in data/denylist.tsv does not explicitly permit.
+USAGE
+}
+
+# --- argument parsing -------------------------------------------------------
+VERB="${1:-}"; [ $# -gt 0 ] && shift
+OPT_JSON=0; OPT_IDS=""; OPT_RUN=""; OPT_MIN="500M"; OPT_DAYS=180
+OPT_TIER="strict"; OPT_ROOT="$HOME"; OPT_LENS="security"
+OPT_TARGET="all"; OPT_TOOL="all"; OPT_APP=""
+
+# A bare word after the verb is its target: `cmai scan dev`, `cmai gc brew`.
+case "${1:-}" in
+  -*|'') : ;;
+  *) OPT_TARGET="$1"; OPT_TOOL="$1"; shift ;;
+esac
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)       OPT_JSON=1 ;;
+    --apply)      CMAI_DRY_RUN=0 ;;
+    --dry-run)    CMAI_DRY_RUN=1 ;;
+    --ids)        OPT_IDS="${2:-}"; shift ;;
+    --run)        OPT_RUN="${2:-}"; shift ;;
+    --min)        OPT_MIN="${2:-}"; shift ;;
+    --older-than) OPT_DAYS="${2:-}"; shift ;;
+    --tier)       OPT_TIER="${2:-}"; shift ;;
+    --root)       OPT_ROOT="${2:-}"; shift ;;
+    --lens)       OPT_LENS="${2:-}"; shift ;;
+    --app)        OPT_APP="${2:-}"; shift ;;
+    -h|--help)    usage; exit 0 ;;
+    *)            cmai_die "unknown option: $1 (try: cmai --help)" ;;
+  esac
+  shift
+done
+export CMAI_DRY_RUN OPT_JSON OPT_TIER OPT_ROOT OPT_MIN OPT_DAYS OPT_LENS OPT_APP
+
+case "$VERB" in
+  ''|-h|--help|help) usage; exit 0 ;;
+
+  preflight)
+    cmai_preflight
+    cmai_preflight_notes
+    ;;
+
+  scan)
+    cmai_os_gate
+    cmai_fda_probe >/dev/null
+    CMAI_SNAPSHOTS=$(cmai_snapshot_count)
+    cmai_scan_dispatch "$OPT_TARGET"
+    ;;
+
+  doctor)  cmai_doctor ;;
+  runs)    cmai_manifest_list ;;
+  show)    [ -n "$OPT_RUN" ] || cmai_die "show needs --run <runid>"
+           cmai_restore_summary "$OPT_RUN" ;;
+  myths)   cmai_myths ;;
+
+  apply)
+    [ -n "$OPT_IDS" ] || cmai_die "apply needs --ids <id,id,...>"
+    cmai_os_gate; cmai_preflight >/dev/null
+    cmai_manifest_open >/dev/null
+    cmai_apply_ids "$OPT_IDS"
+    cmai_manifest_close
+    cmai_report_run "$CMAI_RUNID"
+    ;;
+
+  gc)
+    cmai_os_gate; cmai_preflight >/dev/null
+    cmai_manifest_open >/dev/null
+    cmai_gc_dispatch "$OPT_TOOL"
+    cmai_manifest_close
+    cmai_report_run "$CMAI_RUNID"
+    ;;
+
+  restore)
+    [ -n "$OPT_RUN" ] || cmai_die "restore needs --run <runid>"
+    cmai_manifest_open >/dev/null
+    cmai_restore_run "$OPT_RUN" "$([ "$CMAI_DRY_RUN" = 0 ] && printf 1 || printf 0)"
+    ;;
+
+  *) cmai_die "unknown command: $VERB (try: cmai --help)" ;;
+esac

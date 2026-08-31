@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: brew install shellcheck
+
+      - name: Report environment
+        run: |
+          sw_vers
+          /bin/bash --version | head -1
+          echo "trash: $(command -v trash || echo absent)"
+          echo "jq:    $(command -v jq    || echo absent)"
+
+      - name: Lint and test
+        # GitHub's macOS runners lag the current release, and preflight
+        # deliberately refuses to run below macOS 15. The gate is skipped here
+        # only so the suite can run; nothing else is relaxed.
+        env:
+          CMAI_SKIP_OS_GATE: "1"
+        run: tests/run.sh
+
+      - name: Verify the tool runs read-only
+        env:
+          CMAI_SKIP_OS_GATE: "1"
+        run: |
+          ./bin/cmai --help
+          ./bin/cmai doctor || true
+          ./bin/cmai myths | head -20
+
+      - name: Validate plugin manifests
+        run: |
+          jq empty .claude-plugin/plugin.json
+          jq empty .claude-plugin/marketplace.json

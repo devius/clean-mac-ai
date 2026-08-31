@@ -1,0 +1,29 @@
+# catalog-space.tsv -- general (non-developer) reclaim candidates.
+#
+# Anything also listed in catalog-dev.tsv is excluded at runtime and summarised
+# as a single pointer to /clean-dev, so no path is ever proposed by two skills.
+#
+# Columns: subcategory, path, select, risk, method, undo, why
+#
+#   select   self            the path itself is the candidate
+#            children        each immediate child is a separate candidate
+#            older:<days>    children untouched for at least N days
+#            ext:a,b,c       children with one of these extensions
+#
+# `children` matters: offering "~/Library/Caches, 8.5 GB" as one checkbox is how
+# a cleaner ends up deleting a running app's live data. Caches are per
+# application, so the decision is per application.
+#
+# Note what is deliberately absent: system and user logs, language files,
+# universal binary slices, and "broken" preference plists. docs/WHY-NOT.md
+# explains each omission.
+
+user-caches	~/Library/Caches	children	review	trash	full	Cache for one application. macOS reclaims caches on its own under disk pressure, so removing them buys little and costs that app a slower next launch.
+trash-main	~/.Trash	self	safe	trash	irreversible	Items already in the Trash. Emptying it is what actually returns space that earlier cleans only moved.
+downloads-stale	~/Downloads	older:180	review	trash	full	Untouched for at least 180 days. User data, so it is shown for your decision and never selected for you.
+installer-dmg	~/Downloads	ext:dmg,pkg	review	trash	full	Installer disk image or package. Almost always re-downloadable from the vendor.
+ios-backups	~/Library/Application Support/MobileSync/Backup	self	risky	none	irreversible	iOS device backups. Shown for visibility only: this is often the only copy of a phone, so cmai will not remove it.
+mail-downloads	~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads	children	review	trash	full	Mail attachment copy. Safe only for IMAP accounts where the server still holds the message; for POP or local-only mail these exist nowhere else.
+quicklook-thumbs	~/Library/Caches/com.apple.QuickLook.thumbnailcache	self	safe	trash	rebuildable	Quick Look thumbnail cache; regenerated on demand.
+crashreports	~/Library/Logs/DiagnosticReports	older:90	review	trash	full	Crash report older than 90 days. Useful evidence while you are still diagnosing something, disposable long afterwards.
+saved-state	~/Library/Saved Application State	children	review	trash	full	Window and document restore state for one application. Losing it means that app reopens empty, nothing more.

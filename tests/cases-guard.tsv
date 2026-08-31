@@ -1,0 +1,44 @@
+# Golden verdict table. Columns: path, expect_exit, expect_mode, expect_rule_prefix
+# $FIX expands to the fixture root, $HOME to the home directory.
+# expect_rule_prefix "-" means don't care.
+#
+# ---- system roots must be refused ----
+/System	20	none	-
+/System/Library/Caches	20	none	-
+/System/Volumes/VM	20	none	-
+/usr/bin	20	none	E_SIP
+/bin	20	none	-
+/private/var/db	20	none	-
+/private/var/folders	20	none	-
+/private/var/log	20	none	-
+# ---- lexical rejections ----
+relative/path	20	none	E_RELATIVE
+/etc/../etc/passwd	20	none	E_DOTDOT
+/tmp/*	20	none	E_GLOB
+<EMPTY>	20	none	E_EMPTY
+# ---- structural rejections ----
+/	20	none	E_ROOT
+$HOME	20	none	E_HOME
+$HOME/Library	20	none	-
+# ---- irreplaceable user data ----
+$HOME/Library/Containers	20	none	-
+$HOME/Library/Group Containers	20	none	-
+$HOME/Library/Keychains	20	none	-
+$HOME/Library/Mobile Documents	20	none	-
+# ---- fixture edge cases ----
+# A symlink is unlinked as itself, never followed, so one pointing at /System
+# is refused by default-deny rather than by escape detection. Either way: denied.
+$FIX/symlink-to-system	20	none	E_NORULE
+$FIX/locked-file	20	none	E_SIP
+/usr/local/bin	20	none	E_PARENT_SUNLNK
+$FIX/does-not-exist	20	none	E_ENOENT
+# $TMPDIR resolves under /private/var/folders, which is an explicit deny. That
+# the fixture itself is refused is the correct outcome, and it is why reclaim
+# tests must override CMAI_DENYLIST rather than relying on a temp directory.
+$FIX/normal/cache	20	none	DENY:/private/var/folders
+# ---- a real path covered by no rule at all: default-deny must fire ----
+# $HOME/Development is deliberate: /Users and /Applications both carry sunlnk,
+# so a child of either exercises the parent-flag check instead of default-deny.
+$HOME/Development	20	none	E_NORULE
+# Rule precedence is asserted in tests/test_denylist.sh instead, which drives
+# the rule table directly and so needs no files inside protected directories.

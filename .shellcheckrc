@@ -1,0 +1,10 @@
+# shellcheck configuration.
+#
+# SC1090/SC1091: bin/cmai composes itself by sourcing lib/*.sh through a
+#   variable path. shellcheck cannot follow that, and it is deliberate.
+# SC2016: awk programs are single-quoted on purpose. $1 and $2 inside them are
+#   awk field references, not shell expansions, and double-quoting would break them.
+# SC2034: the absolute tool paths in lib/common.sh ($FIND, $STAT, ...) are used
+#   by the other sourced files. shellcheck analyses each file in isolation and
+#   so cannot see those uses.
+disable=SC1090,SC1091,SC2016,SC2034

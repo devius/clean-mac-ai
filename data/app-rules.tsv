@@ -1,0 +1,20 @@
+# app-rules.tsv -- per-application exceptions.
+#
+# Some applications keep genuine user data inside directories whose names say
+# "cache". A path-based scanner cannot know that, so it is recorded here.
+# The canonical example is Spotify: offline downloads live under its cache
+# directory, and cleaners have proposed deleting users' entire music libraries
+# as a result.
+#
+# Columns: path_fragment, risk, note
+#   risk  review | risky  -- never "safe"; these rows exist to downgrade trust
+
+com.spotify.client	risky	Spotify stores offline downloads inside its cache directory. Removing this deletes music you saved for offline listening, which must then be re-downloaded.
+com.apple.bird	risky	iCloud Drive's local file provider state. Removing it can force a full re-sync and evict local copies.
+com.apple.CloudDocs	risky	iCloud Documents state; removing it can trigger a full re-download.
+Adobe	review	Adobe keeps media cache and previews here; removing them forces lengthy re-rendering of video previews.
+com.apple.Photos	risky	Photos-managed caches; manage these through Photos rather than by deletion.
+Steam	review	Steam keeps shader caches and partial downloads alongside game data.
+com.docker.docker	risky	Docker Desktop's VM disk image lives here. Use docker's own prune commands instead.
+dev.kdrag0n.MacVirt	risky	OrbStack VM data. Use OrbStack or docker prune commands rather than deleting files.
+com.microsoft.OneDrive	risky	OneDrive local state; removing it can force a full re-sync.

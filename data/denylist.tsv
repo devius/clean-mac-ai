@@ -1,0 +1,110 @@
+# denylist.tsv -- the rule table behind guard_path().
+#
+# Columns (tab-separated):
+#   kind      DENY | ASK | ALLOW | CHILDREN | DENYGLOB | ASKGLOB
+#   pattern   absolute path, or ~ for $HOME. DENYGLOB/ASKGLOB use shell case globbing.
+#   mindepth  minimum path depth (number of '/' separators) required to match
+#   mode      self | children | none   (children = delete contents, keep the directory)
+#   reason    shown to the user verbatim when the rule fires
+#
+# Semantics:
+#   - DENY/ASK/ALLOW/CHILDREN are PREFIX rules: match if path == pattern or path starts with pattern/
+#   - Longest matching pattern wins. Ties break toward the stronger verdict:
+#       DENY > ASK > CHILDREN > ALLOW
+#   - A path matching NO rule is DENIED. Default-deny is the whole point.
+#   - ~/.clean-mac-ai/denylist.local.tsv is appended after this file but may only
+#     STRENGTHEN rules; ALLOW lines there are ignored so nobody can unprotect /System.
+
+# ---------------------------------------------------------------- system roots
+DENY	/System	0	none	SIP-protected sealed system volume
+DENY	/System/Volumes/VM	0	none	live swapfiles and sleepimage; deleting these panics the kernel
+DENY	/bin	0	none	SIP-protected
+DENY	/sbin	0	none	SIP-protected
+DENY	/usr	0	none	SIP-protected
+DENY	/private/etc	0	none	system configuration
+DENY	/private/var/db	0	none	package receipts, TCC database, launchd state
+DENY	/private/var/folders	0	none	OS-owned per-user temp and dyld caches for running processes
+DENY	/private/var/log	0	none	logd rotates these itself; deleting them destroys diagnostic evidence
+DENY	/Library/Apple	0	none	Apple-managed
+DENY	/Library/Logs	0	none	diagnostic evidence; see docs/WHY-NOT.md
+DENY	/Volumes	0	none	mount points; use the volume itself, never this directory
+# /usr/local is carved out of the /usr DENY above by longest-match-wins.
+ALLOW	/usr/local	3	self	user-managed Homebrew prefix, not part of the sealed system
+
+# ------------------------------------------------------------ irreplaceable data
+DENY	~/Library/Keychains	0	none	credentials; deletion is unrecoverable
+DENY	~/Library/Mobile Documents	0	none	iCloud Drive; traversal alone materializes evicted files and deleting a placeholder deletes the cloud original
+DENY	~/Library/Group Containers	0	none	shared live app data, including VM disk images (OrbStack, Docker)
+DENY	~/Library/Containers	0	none	never the container root; only exact bundle directories below it
+DENY	~/Library/Developer/Xcode/Archives	0	none	shipped-build dSYMs; without these your crash reports can never be symbolicated
+DENY	~/Library/Application Support/MobileSync	0	none	real iOS device backups, often the only copy of a phone
+# .photoslibrary is a bundle EXTENSION, not a path component: real libraries are
+# named "Photos Library.photoslibrary". Matching */.photoslibrary/* would have
+# protected nothing at all.
+DENYGLOB	*.photoslibrary	0	none	Photos library bundle; manage through Photos.app only
+DENYGLOB	*.photoslibrary/*	0	none	Photos library internals; editing these corrupts the library
+DENYGLOB	*.musiclibrary	0	none	Music library bundle
+DENYGLOB	*.musiclibrary/*	0	none	Music library internals
+DENYGLOB	*.tvlibrary	0	none	TV library bundle
+DENYGLOB	*.photolibrary	0	none	Legacy iPhoto library bundle
+DENYGLOB	*.photolibrary/*	0	none	Legacy iPhoto library internals
+DENYGLOB	*/Library/Keychains/*	0	none	credentials
+DENYGLOB	*/Mail/*/Envelope Index*	0	none	Mail index; rebuild through Mail > Mailbox > Rebuild, never by deletion
+DENYGLOB	*/Library/Mail/*	0	none	mail store; POP and local-only messages exist nowhere else
+DENY	~/.ssh	0	none	private keys
+DENY	~/.gnupg	0	none	private keys
+DENY	~/Library/Safari	0	none	browsing data and bookmarks; use the browser's own controls
+DENY	~/Library/Messages	0	none	message history
+
+# ---------------------------------------------------------------- ask, per item
+ASK	~/Library/Containers	4	self	one app's sandbox; may hold real documents, not just cache
+ASK	~/Library/Application Support	4	self	mixed live app data; licences and databases live here
+ASK	~/Library/Logs	4	self	diagnostic evidence; default is to keep these
+ASK	~/Downloads	3	self	user data; per-item only, never in bulk
+ASK	~/Desktop	3	self	user data; per-item only, never in bulk
+ASK	~/Documents	3	self	user data; per-item only, never in bulk
+ASK	~/Movies	3	self	user data; per-item only, never in bulk
+ASK	~/Pictures	3	self	user data; per-item only, never in bulk
+ASK	~/Music	3	self	user data; per-item only, never in bulk
+ASK	~/Library/Preferences	4	self	cfprefsd caches these in memory; deleting behind its back loses settings
+
+# ------------------------------------------------------- regenerable, per item
+ALLOW	~/Library/Caches	4	self	user cache; regenerated on demand
+ALLOW	~/Library/Developer/CoreSimulator/Caches	5	self	simulator caches; regenerated on demand
+
+# ------------------------------------ contents-only: keep the directory itself
+# Homebrew/brew#5083: a cleaner removed the cache DIRECTORY rather than its
+# contents and broke `brew doctor` until Homebrew patched itself to recreate it.
+CHILDREN	~/Library/Caches/Homebrew	4	children	Homebrew download cache; the directory must survive (Homebrew/brew#5083)
+CHILDREN	~/Library/Developer/Xcode/DerivedData	5	children	Xcode build intermediates; rebuildable, but keep the parent directory
+CHILDREN	~/Library/Developer/Xcode/iOS DeviceSupport	5	children	per-OS-version symbols, re-downloaded when a device reconnects
+CHILDREN	~/Library/Caches/go-build	4	children	Go build cache; `go clean -cache` is preferred
+CHILDREN	~/.npm/_cacache	3	children	npm content-addressable cache; `npm cache clean --force` is preferred
+CHILDREN	~/.gradle/caches	3	children	Gradle dependency cache; re-downloaded on next build
+
+# --------------------------------------------- developer caches, per item
+# These are named explicitly rather than covered by a broad rule: default-deny
+# means anything not listed here cannot be touched, which is the intended
+# safety property, so each reclaimable location must be justified once.
+ALLOW	~/go/pkg/mod	4	self	Go module cache; re-downloadable with `go mod download`
+ALLOW	~/.rustup/toolchains	3	self	Rust toolchains; reinstallable with rustup
+ALLOW	~/.cargo/registry	3	self	Cargo registry cache; re-downloaded on next build
+ALLOW	~/.bun/install/cache	4	self	Bun install cache
+ALLOW	~/.m2/repository	3	self	Maven local repository; re-downloaded on next build
+ALLOW	~/.pyenv/cache	3	self	pyenv source tarballs
+ALLOW	~/.cache/puppeteer	3	self	Puppeteer browser binaries; re-downloaded on demand
+ALLOW	~/Library/Developer/Xcode/DocumentationCache	5	self	Xcode documentation cache; re-downloaded on demand
+
+# ------------------------------------------- build artifacts, wherever they live
+# Name rules carry length 0 and so can never override a deny. A node_modules
+# directory inside a protected location stays protected.
+ALLOWNAME	node_modules	3	self	Package directory, regenerated from the project's lockfile
+ALLOWNAME	.next	3	self	Next.js build output, regenerated by the next build
+ALLOWNAME	.turbo	3	self	Turborepo cache, regenerated by the next build
+ALLOWNAME	.nuxt	3	self	Nuxt build output, regenerated by the next build
+ALLOWNAME	Pods	3	self	CocoaPods checkout, restored by `pod install`
+ASKNAME	target	3	self	Usually a Rust or Java build directory, but the name is generic enough to be worth confirming
+ASKNAME	build	3	self	Commonly a build directory, but some projects keep sources under this name
+ASKNAME	.venv	3	self	Python virtual environment, rebuilt from requirements or a lockfile
+ASKNAME	venv	3	self	Python virtual environment, rebuilt from requirements or a lockfile
+ASKNAME	dist	3	self	Distribution output, regenerated by the next build

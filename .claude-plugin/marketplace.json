@@ -1,0 +1,26 @@
+{
+  "name": "clean-mac-ai",
+  "owner": {
+    "name": "David Machakhelidze",
+    "url": "https://github.com/davidmachakhelidze"
+  },
+  "metadata": {
+    "description": "An honest Mac cleaner for Claude Code: real measurement, trash-first removal, full undo, and a documented refusal to do the things that do not work.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "clean-mac-ai",
+      "source": "./",
+      "description": "Find where your Mac's disk space actually went and reclaim it safely. Six skills covering disk space, developer caches, app uninstallation, background persistence and honest performance diagnosis. Scans read-only, removes only what you approve, trash-first, with a full undo record.",
+      "version": "0.1.0",
+      "author": { "name": "David Machakhelidze" },
+      "category": "productivity",
+      "keywords": [
+        "macos", "disk-space", "cleanup", "cleanmymac", "uninstaller",
+        "developer-tools", "maintenance", "privacy"
+      ],
+      "strict": false
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+# catalog-dev.tsv -- developer toolchain locations.
+#
+# This file is AUTHORITATIVE for overlap: scan_space excludes every path listed
+# here and emits one summary row pointing at /clean-dev instead, so no path is
+# ever proposed by two skills.
+#
+# Columns: tool, subcategory, path, method, undo, why
+#   method  gc:<id> to use the toolchain's own collector, or "trash"
+#   undo    full | rebuildable | irreversible
+#
+# Preferring a tool's own collector is the rule, not an optimization: its
+# maintainers decide what is safe to drop, it understands its own layout, and
+# it cannot be tricked by a symlink the way a path walker can.
+
+brew	homebrew-cache	~/Library/Caches/Homebrew	gc:brew	irreversible	Homebrew download cache. `brew cleanup` empties it without removing the directory, which is what broke installs in Homebrew/brew#5083.
+brew	homebrew-logs	~/Library/Logs/Homebrew	trash	full	Homebrew build logs from previous installs.
+docker	docker-build-cache	-	gc:docker-builder	irreversible	Docker BuildKit layer cache. Usually the single largest reclaimable item on a developer machine.
+docker	docker-images	-	gc:docker-image	irreversible	Dangling and unreferenced images. Tagged images can be pulled again; untagged local builds cannot.
+npm	npm-cache	~/.npm/_cacache	gc:npm	irreversible	npm content-addressable cache. Hardlink-heavy, so naive tools overstate its size.
+pnpm	pnpm-store	~/.pnpm-store	gc:pnpm	irreversible	pnpm content-addressable store. Pruning may require reinstalling existing node_modules symlink farms.
+yarn	yarn-cache	~/Library/Caches/Yarn	gc:yarn	irreversible	Yarn package cache.
+bun	bun-cache	~/.bun/install/cache	trash	rebuildable	Bun install cache.
+go	go-mod-cache	~/go/pkg/mod	gc:go-mod	irreversible	Go module cache. Re-downloadable with `go mod download`, given a network and a live proxy.
+go	go-build-cache	~/Library/Caches/go-build	gc:go-build	irreversible	Go build cache. Rebuilding costs CPU only.
+cargo	cargo-registry	~/.cargo/registry	trash	rebuildable	Cargo registry cache; re-downloaded on next build.
+rustup	rustup-toolchains	~/.rustup/toolchains	trash	rebuildable	Rust toolchains. Only remove ones you no longer target.
+xcode	xcode-derived-data	~/Library/Developer/Xcode/DerivedData	trash	rebuildable	Xcode build intermediates and indexes. Rebuildable at the cost of one clean build.
+xcode	xcode-device-support	~/Library/Developer/Xcode/iOS DeviceSupport	trash	rebuildable	Per-iOS-version debug symbols, re-downloaded when a device reconnects. Often tens of gigabytes.
+xcode	simulator-devices	~/Library/Developer/CoreSimulator/Devices	gc:simctl	irreversible	Simulator devices, including unavailable ones. `simctl delete unavailable` is the safe subset.
+xcode	simulator-caches	~/Library/Developer/CoreSimulator/Caches	trash	rebuildable	Simulator runtime caches.
+gradle	gradle-cache	~/.gradle/caches	trash	rebuildable	Gradle dependency and build cache; re-downloaded on next build.
+maven	maven-repo	~/.m2/repository	trash	rebuildable	Maven local repository; re-downloaded on next build.
+cocoapods	cocoapods-cache	~/Library/Caches/CocoaPods	trash	rebuildable	CocoaPods spec and pod cache.
+pip	pip-cache	~/Library/Caches/pip	gc:pip	irreversible	pip wheel and HTTP cache.
+uv	uv-cache	~/Library/Caches/uv	gc:uv	irreversible	uv package cache.
+python	pyenv-cache	~/.pyenv/cache	trash	rebuildable	pyenv downloaded source tarballs.
+conda	conda-pkgs	~/miniconda3/pkgs	trash	rebuildable	conda package cache.
+playwright	playwright-browsers	~/Library/Caches/ms-playwright	trash	rebuildable	Playwright browser binaries; re-downloaded on the next test run.
+puppeteer	puppeteer-browsers	~/.cache/puppeteer	trash	rebuildable	Puppeteer browser binaries.
+electron	electron-cache	~/Library/Caches/electron	trash	rebuildable	Electron binary downloads.
+jetbrains	jetbrains-caches	~/Library/Caches/JetBrains	trash	rebuildable	JetBrains IDE indexes and caches, kept per IDE version. Old versions accumulate.
+vscode	vscode-cached-data	~/Library/Application Support/Code/CachedData	trash	rebuildable	VS Code cached extension and runtime data.
