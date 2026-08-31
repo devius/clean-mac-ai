@@ -37,8 +37,11 @@ $FIX/does-not-exist	20	none	E_ENOENT
 # tests must override CMAI_DENYLIST rather than relying on a temp directory.
 $FIX/normal/cache	20	none	DENY:/private/var/folders
 # ---- a real path covered by no rule at all: default-deny must fire ----
-# $HOME/Development is deliberate: /Users and /Applications both carry sunlnk,
-# so a child of either exercises the parent-flag check instead of default-deny.
-$HOME/Development	20	none	E_NORULE
+# $PROBE is created by test_guard.sh under /tmp. It has to be somewhere no rule
+# covers AND whose parent carries no sunlnk flag: /Users and /Applications both
+# do, so a child of either would exercise the parent-flag check instead. It also
+# has to be a path that exists on any machine, which is why the test creates it
+# rather than assuming a directory such as $HOME/Development is present.
+$PROBE	20	none	E_NORULE
 # Rule precedence is asserted in tests/test_denylist.sh instead, which drives
 # the rule table directly and so needs no files inside protected directories.

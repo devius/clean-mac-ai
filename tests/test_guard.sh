@@ -19,7 +19,19 @@ export CMAI_ROOT CMAI_DRY_RUN=1
 . "$CMAI_PLUGIN_ROOT/lib/guard.sh"
 
 FIX=$("$HERE/mkfixture.sh")
-cleanup() { "$HERE/rmfixture.sh" "$FIX" >/dev/null 2>&1; /bin/rm -rf "$CMAI_ROOT"; }
+
+# A path that no rule covers, for the default-deny case. Created rather than
+# assumed: the previous version used $HOME/Development, which exists on a
+# developer's machine and not on a CI runner, where it returned E_ENOENT before
+# ever reaching the rule table.
+PROBE=/tmp/cmai-norule-probe.$$
+/bin/mkdir -p "$PROBE"
+
+cleanup() {
+  "$HERE/rmfixture.sh" "$FIX" >/dev/null 2>&1
+  /bin/rmdir "$PROBE" 2>/dev/null
+  /bin/rm -rf "$CMAI_ROOT"
+}
 trap cleanup EXIT
 
 pass=0; fail=0
@@ -31,6 +43,7 @@ while IFS=$'\t' read -r path want_exit want_mode want_rule; do
   # Expand $FIX and $HOME without eval.
   p=${path//\$FIX/$FIX}
   p=${p//\$HOME/$HOME}
+  p=${p//\$PROBE/$PROBE}
   [ "$p" = "<EMPTY>" ] && p=""
 
   out=$(guard_path "$p" test 2>/dev/null); got_exit=$?
