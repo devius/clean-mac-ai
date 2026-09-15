@@ -57,8 +57,11 @@ cmai_report_run() {
 # act on one project artifact is a poor trade. Safety is unaffected either way:
 # cmai_reclaim_one calls guard_path again at the moment of action.
 cmai_apply_ids() {
-  local ids="$1" from="${2:-all}" line id path mode method undo
-  local want; want=$(printf '%s' "$ids" | $TR ',' '\n' | $GREP -v '^$')
+  local ids="$1" from="${2:-all}" line id path mode method undo confirmed=0
+  local want; want=$(printf '%s' "$ids" | $TR ',' '\n' | $GREP -v '^$' | $SORT -u)
+  # A single id is an individual confirmation; a list is a batch, and ASK
+  # rows in a batch are still skipped.
+  [ "$(printf '%s\n' "$want" | $GREP -c .)" = 1 ] && confirmed=1
 
   _cmai_scan_run "$from" | while IFS=$'\t' read -r id _cat _sub path _bytes _human _risk verdict mode method undo _needs _owner _last _why; do
     [ -n "$(printf '%s' "$want" | $GREP -x "$id")" ] || continue
@@ -70,7 +73,7 @@ cmai_apply_ids() {
       none|defer|report) cmai_warn "not actionable here: $path"; continue ;;
       gc:*) cmai_warn "use 'cmai gc' for $path"; continue ;;
     esac
-    cmai_reclaim_one "$path" "${mode:-self}" "${_cat:-space}"
+    cmai_reclaim_one "$path" "${mode:-self}" "${_cat:-space}" "$confirmed"
   done
 }
 

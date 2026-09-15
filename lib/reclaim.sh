@@ -12,14 +12,23 @@
 # Re-guarding matters: between the scan and the user's approval an app may have
 # launched, a path may have changed, or a symlink may have been swapped.
 
-# cmai_reclaim_one <path> <mode> [category]
+# cmai_reclaim_one <path> <mode> [category] [confirmed]
 #   mode: self | children
+#   confirmed: 1 when the user named exactly this item on its own. That is what
+#   ASK means ("confirmed individually"), so only then may a rule-table ASK act.
+#   The guard's live-state ASKs (E_TCC, E_INUSE, E_NEEDS_ROOT) never act.
 # Returns 0 when handled (including a deliberate skip), 1 on a real failure.
 cmai_reclaim_one() {
-  local p="$1" gmode="${2:-self}" cat="${3:--}"
+  local p="$1" gmode="${2:-self}" cat="${3:--}" confirmed="${4:-0}"
   local gline grc bytes dest child backend
 
   gline=$(guard_path "$p" reclaim); grc=$?
+  if [ "$grc" -eq "$GUARD_ASK" ] && [ "$confirmed" = 1 ]; then
+    case "$(printf '%s' "$gline" | $AWK -F'\t' '{print $2}')" in
+      E_*) : ;;
+      *)   grc=0 ;;
+    esac
+  fi
   if [ "$grc" -ne 0 ]; then
     cmai_manifest_write SKIP "guard:$grc" "$p" "" 0 - "$gmode" "$cat" \
       "$(printf '%s' "$gline" | $AWK -F'\t' '{print $3}')"
@@ -33,7 +42,7 @@ cmai_reclaim_one() {
   if [ "$gmode" = children ]; then
     while IFS= read -r child; do
       [ -n "$child" ] || continue
-      cmai_reclaim_one "$child" self "$cat" || return 1
+      cmai_reclaim_one "$child" self "$cat" "$confirmed" || return 1
     done <<EOF
 $($FIND "$p" -mindepth 1 -maxdepth 1 2>/dev/null)
 EOF
