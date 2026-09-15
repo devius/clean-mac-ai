@@ -2,7 +2,7 @@
 name: clean-guard
 description: Audit what runs in the background on a Mac and what it can reach - launch agents and daemons, login items, orphaned persistence pointing at deleted binaries, code signing status of what starts automatically, and the privacy footprint left by browsers and recent-item lists. Reports read-only and changes nothing without explicit per-item approval. Use when someone asks what runs at startup, what is slowing down boot, whether they have adware or something suspicious installed, wants a privacy or security check, or asks what has access to their camera or microphone.
 argument-hint: "[--lens security|startup]"
-allowed-tools: Bash(*/bin/cmai *), Bash(launchctl *), Bash(codesign *), Bash(plutil *), Bash(sfltool *), Bash(csrutil *), Bash(fdesetup *), Bash(defaults read *), Read, Glob, Grep, AskUserQuestion
+allowed-tools: Bash(*/bin/cmai *), Bash(launchctl *), Bash(codesign *), Bash(plutil *), Bash(sfltool *), Bash(csrutil *), Bash(spctl *), Bash(/usr/libexec/ApplicationFirewall/*), Bash(fdesetup *), Bash(defaults read *), Read, Glob, Grep, AskUserQuestion
 ---
 
 # /clean-guard -- what starts itself, and what it is allowed to do
@@ -58,7 +58,7 @@ anything:
 ```bash
 csrutil status                                    # System Integrity Protection
 fdesetup status                                   # FileVault
-defaults read /Library/Preferences/com.apple.alf globalstate 2>/dev/null  # firewall
+/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate        # firewall
 spctl --status 2>/dev/null                        # Gatekeeper
 ```
 

@@ -65,7 +65,11 @@ SYNC=/bin/sync
 : "${CMAI_PROJ_FRESH_DAYS:=7}"      # artifact rebuilt this recently is not preselected
 : "${CMAI_PROJ_PARALLEL:=6}"        # du workers
 
-CMAI_VERSION="0.1.0"
+# Read from the plugin manifest so preflight, the manifest header and the
+# published plugin can never disagree about what version this is.
+CMAI_VERSION=$(/usr/bin/sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$CMAI_PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null | /usr/bin/head -1)
+[ -n "$CMAI_VERSION" ] || CMAI_VERSION="unknown"
 CMAI_TAB=$(printf '\t')
 
 # CMAI_PLUGIN_ROOT is set by bin/cmai before sourcing.
@@ -89,8 +93,11 @@ cmai_die()   { cmai_error "$*"; exit 1; }
 # --- formatting -------------------------------------------------------------
 # Sizes are precomputed here so that consumers (including Claude) never have to
 # do arithmetic on raw byte counts.
+# LC_ALL=C because awk's printf honours LC_NUMERIC: on a German or French Mac
+# this otherwise returns "1,0 KB", which then lands in every report line and
+# every --json record.
 cmai_human() {
-  $AWK -v b="${1:-0}" 'BEGIN{
+  LC_ALL=C $AWK -v b="${1:-0}" 'BEGIN{
     split("B KB MB GB TB PB", u, " "); i=1
     while (b >= 1024 && i < 6) { b /= 1024; i++ }
     if (i == 1) printf "%d %s\n", b, u[i]

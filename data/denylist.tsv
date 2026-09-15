@@ -28,8 +28,27 @@ DENY	/private/var/log	0	none	logd rotates these itself; deleting them destroys d
 DENY	/Library/Apple	0	none	Apple-managed
 DENY	/Library/Logs	0	none	diagnostic evidence; see docs/WHY-NOT.md
 DENY	/Volumes	0	none	mount points; use the volume itself, never this directory
-# /usr/local is carved out of the /usr DENY above by longest-match-wins.
-ALLOW	/usr/local	3	self	user-managed Homebrew prefix, not part of the sealed system
+# The package-manager prefixes, all three, denied by name.
+#
+# These are LIVE installations -- Cellar, Homebrew/Library, opt, bin, lib -- not
+# caches. `brew cleanup` is the only collector permitted to touch them, for the
+# same reason as Homebrew/brew#5083: the tool understands its own layout and a
+# path walker does not.
+#
+# /usr/local is denied explicitly rather than left to fall through to the /usr
+# rule above, so the verdict AND the stated reason are identical on Intel and
+# Apple Silicon. Before this, `ALLOW /usr/local` meant the entire live Homebrew
+# install was ALLOW with needs=none on Intel, while the same install at
+# /opt/homebrew was default-denied on Apple Silicon -- default-deny, the core
+# safety property, varied with the chip. Homebrew chowns these directories to
+# the invoking user, so the root-ownership ASK never fires, and the sunlnk flag
+# on /usr/local only protects its direct children.
+#
+# At lengths 10, 13 and 10 these also beat the length-0 name rules, so
+# node_modules can no longer tunnel into any of the three prefixes.
+DENY	/usr/local	0	none	live Homebrew prefix on Intel; brew owns this tree and `brew cleanup` is the only safe collector
+DENY	/opt/homebrew	0	none	live Homebrew prefix on Apple Silicon; brew owns this tree and `brew cleanup` is the only safe collector
+DENY	/opt/local	0	none	live MacPorts prefix; port owns this tree
 
 # ------------------------------------------------------------ irreplaceable data
 DENY	~/Library/Keychains	0	none	credentials; deletion is unrecoverable
@@ -57,7 +76,13 @@ DENY	~/Library/Safari	0	none	browsing data and bookmarks; use the browser's own 
 DENY	~/Library/Messages	0	none	message history
 
 # ---------------------------------------------------------------- ask, per item
-ASK	~/Library/Containers	4	self	one app's sandbox; may hold real documents, not just cache
+# A permissive rule wins only when STRICTLY longer, so an ASK with the same
+# pattern string as the DENY above could never fire -- which silently made
+# catalog-space.tsv's mail-downloads row unreachable: the scan offered it and
+# the guard always refused. Naming the Data subdirectory makes the pattern
+# longer than the deny, so the intent (deny the container root, ask per bundle)
+# actually works.
+ASK	~/Library/Containers/com.apple.mail/Data	6	self	Mail's container; attachment copies are reclaimable, the rest of it is not
 ASK	~/Library/Application Support	4	self	mixed live app data; licences and databases live here
 ASK	~/Library/Logs	4	self	diagnostic evidence; default is to keep these
 ASK	~/Downloads	3	self	user data; per-item only, never in bulk

@@ -28,9 +28,10 @@ ck "$HOME/Pictures/Photos Library.photoslibrary"              DENY
 ck "$HOME/Pictures/Photos Library.photoslibrary/database"     DENY
 ck "$HOME/Music/Music Library.musiclibrary"                   DENY
 ck "/Volumes/Backup/Old Photos.photoslibrary/Masters"         DENY
-# A longer permissive prefix does carve out of a shorter deny: /usr vs /usr/local.
+# /usr stays denied. /usr/local used to be a permissive carve-out of it; it is
+# now denied in its own right, so the carve-out branch is exercised against a
+# fixture table further down instead.
 ck "/usr/bin/something"                                       DENY
-ck "/usr/local/Cellar/foo"                                    ALLOW
 # Name rules apply where nothing protective matches.
 ck "$HOME/Development/proj/node_modules"                      ALLOW
 ck "$HOME/Development/proj/target"                            ASK
@@ -80,6 +81,59 @@ done
 for n in target build .venv venv dist out vendor deps _build obj; do
   ck "$P/$n" ASK
 done
+
+# --- package-manager prefixes, identical on every architecture --------------
+# These are LIVE installations, not caches. Homebrew chowns its directories to
+# the invoking user, so the root-ownership ASK never fires, and the sunlnk flag
+# on /usr/local protects only its direct children -- the rule table is the only
+# thing standing here. Asserted in this file rather than cases-guard.tsv because
+# a given Mac has at most one of these prefixes, and guard_path returns
+# E_ENOENT for an absent path before any rule is consulted.
+ck "/usr/local"                                               DENY
+ck "/usr/local/bin"                                           DENY
+ck "/usr/local/Cellar/wget/1.0"                               DENY
+ck "/usr/local/Homebrew/Library"                              DENY
+ck "/opt/homebrew"                                            DENY
+ck "/opt/homebrew/Cellar"                                     DENY
+ck "/opt/local"                                               DENY
+# A name rule must not tunnel into any prefix. Before these rows,
+# /opt/homebrew/lib/node_modules was ALLOW via ALLOWNAME:node_modules and
+# /usr/local/lib/node_modules was ALLOW via ALLOW:/usr/local, so
+# `scan projects --root /` offered the global npm prefix for deletion.
+ck "/usr/local/lib/node_modules"                              DENY
+ck "/opt/homebrew/lib/node_modules"                           DENY
+ck "/opt/local/lib/node_modules"                              DENY
+# Unchanged: a project's own node_modules is still reclaimable.
+ck "$HOME/Development/proj/node_modules"                      ALLOW
+
+# --- the Mail container carve-out ------------------------------------------
+# A permissive rule wins only when STRICTLY longer, so an ASK sharing the DENY's
+# pattern string could never fire, which made catalog-space.tsv's mail-downloads
+# row unreachable: offered by the scan, always refused by the guard.
+ck "$HOME/Library/Containers"                                 DENY
+ck "$HOME/Library/Containers/com.apple.Safari"                DENY
+ck "$HOME/Library/Containers/com.apple.mail/Data/Library/Mail Downloads/a" ASK
+
+# --- iCloud, asserted here since the directory may not exist ---------------
+ck "$HOME/Library/Mobile Documents"                           DENY
+ck "$HOME/Library/Mobile Documents/proj/node_modules"         DENY
+
+# --- the carve-out branch, on a fixture table -------------------------------
+# `allow_len > deny_len` is the subtlest branch in _guard_eval_rules, and since
+# /usr/local became a deny of its own, no shipped row exercises it any more. It
+# is driven against a fixture rather than left uncovered, because the day
+# someone adds a real carve-out is the day it needs to still work.
+FIXTBL="$CMAI_ROOT/carveout.tsv"
+{ printf 'DENY\t/zz\t0\tnone\touter deny\n'
+  printf 'ALLOW\t/zz/inner\t2\tself\tlonger permissive prefix wins\n'
+  printf 'ALLOW\t/zz\t0\tself\tequal length must NOT win\n'
+} > "$FIXTBL"
+_REAL_DENYLIST=$CMAI_DENYLIST
+CMAI_DENYLIST="$FIXTBL"
+ck "/zz/other"                                                DENY
+ck "/zz/inner/thing"                                          ALLOW
+ck "/zz"                                                      DENY
+CMAI_DENYLIST=$_REAL_DENYLIST
 
 # --- the reserved-name footgun ---------------------------------------------
 # `ALLOWNAME Library` would resolve $HOME/Library itself to ALLOW: no DENY

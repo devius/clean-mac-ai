@@ -5,6 +5,7 @@
 
 CMAI_OS_MAJOR=""; CMAI_OS_FULL=""; CMAI_ARCH=""
 CMAI_FDA="unknown"; CMAI_TRASH_OK="unknown"; CMAI_SNAPSHOTS=0; CMAI_SUDO="no"
+CMAI_GIT_OK="unknown"
 
 cmai_os_detect() {
   CMAI_OS_FULL=$($SWVERS -productVersion 2>/dev/null)
@@ -52,6 +53,22 @@ cmai_trash_probe() {
   printf '%s\n' "$CMAI_TRASH_OK"
 }
 
+# /usr/bin/git is not git. It is com.apple.dt.xcode_select.tool-shim-public, a
+# stub that forwards to the Command Line Tools -- and on a Mac without them it
+# raises an install dialog and exits non-zero. Everything that depends on git
+# must know whether it is real, because the tracked-source check is a SAFETY
+# guarantee: without git we cannot prove a directory is untracked.
+cmai_git_probe() {
+  if [ -x "$GIT" ] && $GIT --version >/dev/null 2>&1; then
+    CMAI_GIT_OK=yes
+  elif [ -x "$GIT" ]; then
+    CMAI_GIT_OK=stub          # present, but the Command Line Tools are absent
+  else
+    CMAI_GIT_OK=no
+  fi
+  printf '%s\n' "$CMAI_GIT_OK"
+}
+
 cmai_sudo_probe() {
   if /usr/bin/sudo -n -v >/dev/null 2>&1; then CMAI_SUDO=cached; else CMAI_SUDO=no; fi
   printf '%s\n' "$CMAI_SUDO"
@@ -74,6 +91,7 @@ cmai_preflight() {
   cmai_fda_probe   >/dev/null
   cmai_trash_probe >/dev/null
   cmai_sudo_probe  >/dev/null
+  cmai_git_probe   >/dev/null
   CMAI_SNAPSHOTS=$(cmai_snapshot_count)
   backend=$(cmai_pick_backend)
 
@@ -84,6 +102,7 @@ cmai_preflight() {
   printf 'trash_works\t%s\n'  "$CMAI_TRASH_OK"
   printf 'backend\t%s\n'      "$backend"
   printf 'sudo\t%s\n'         "$CMAI_SUDO"
+  printf 'git\t%s\n'          "$CMAI_GIT_OK"
   printf 'local_snapshots\t%s\n' "$CMAI_SNAPSHOTS"
   printf 'df_avail\t%s\n'     "$(cmai_df_avail)"
   printf 'dry_run\t%s\n'      "$CMAI_DRY_RUN"
@@ -118,6 +137,22 @@ cmai_preflight_notes() {
 
   clean-mac-ai will not run that for you.
 NOTE
+
+  case "$CMAI_GIT_OK" in
+    yes) : ;;
+    *) cat >&2 <<'NOTE'
+
+  git is not usable on this machine.
+
+  /usr/bin/git is a stub that forwards to the Xcode Command Line Tools. Without
+  them, clean-mac-ai cannot tell a build directory from committed source, so
+  scan projects will protect everything inside a repository rather than risk
+  offering your code. Install them with:
+
+    xcode-select --install
+NOTE
+    ;;
+  esac
 
   if [ "$CMAI_FDA" = no ]; then cat >&2 <<'NOTE'
 

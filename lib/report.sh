@@ -82,10 +82,23 @@ cmai_doctor() {
   local rc=0 p
   printf 'check\tresult\tdetail\n'
   printf 'bash\t%s\t%s\n' "$([ -x /bin/bash ] && printf ok || printf MISSING)" "$(/bin/bash --version 2>/dev/null | $AWK 'NR==1{print $4}')"
-  for p in "$FIND" "$STAT" "$DF" "$AWK" "$TRASH" "$JQ" "$TMUTIL"; do
+  # $REALPATH earns its place here: guard_path resolves every path through it,
+  # so without it the kernel returns E_UNRESOLVED for everything and refuses the
+  # entire disk. That failure is safe but invisible, which is the problem.
+  for p in "$FIND" "$STAT" "$DF" "$AWK" "$TRASH" "$JQ" "$TMUTIL" \
+           "$REALPATH" "$SQLITE3" "$LSOF" "$PLUTIL" "$CODESIGN"; do
     if [ -x "$p" ]; then printf 'tool\tok\t%s\n' "$p"
     else printf 'tool\tMISSING\t%s\n' "$p"; rc=1; fi
   done
+
+  # git is reported separately because "present" is not the same as "usable":
+  # /usr/bin/git is a Command Line Tools stub, and when it cannot run, the
+  # tracked-source check can no longer tell build output from committed code.
+  case "$(cmai_git_probe)" in
+    yes)  printf 'git\tok\t%s\n' "$GIT" ;;
+    stub) printf 'git\tSTUB\tpresent but the Xcode Command Line Tools are absent; run: xcode-select --install\n'; rc=1 ;;
+    *)    printf 'git\tMISSING\t%s\n' "$GIT"; rc=1 ;;
+  esac
   if [ -f "$CMAI_DENYLIST" ]; then
     printf 'denylist\tok\t%s rules\n' "$($GREP -cv '^#\|^$' "$CMAI_DENYLIST")"
   else
@@ -99,6 +112,21 @@ cmai_doctor() {
     if [ $? -eq "$GUARD_DENY" ]; then printf 'guard\tok\trefuses %s\n' "$p"
     else printf 'guard\tFAIL\tdid not refuse %s\n' "$p"; rc=1; fi
   done
+
+  # And one path it must PERMIT. A self-check that only verifies refusals passes
+  # trivially when the kernel is dead: with /bin/realpath missing, every path
+  # returns E_UNRESOLVED, every refusal above still "passes", and doctor exits 0
+  # on a machine where nothing can ever be reclaimed.
+  # The probe path must EXIST: guard_path returns E_ENOENT before consulting any
+  # rule, so a made-up path would "fail" this check for the wrong reason and
+  # make it as useless as the refusal-only version it replaces.
+  if [ -d "$HOME/Library/Caches" ]; then
+    guard_path "$HOME/Library/Caches" doctor >/dev/null 2>&1
+    case $? in
+      "$GUARD_ALLOW"|"$GUARD_ASK") printf 'guard\tok\tpermits an ordinary cache path\n' ;;
+      *) printf 'guard\tFAIL\trefuses everything, including paths it should permit\n'; rc=1 ;;
+    esac
+  fi
   printf 'dry_run\t%s\t%s\n' "$([ "$CMAI_DRY_RUN" = 1 ] && printf ok || printf ARMED)" \
     "$([ "$CMAI_DRY_RUN" = 1 ] && printf 'nothing will be changed' || printf 'changes ARE enabled')"
   return $rc

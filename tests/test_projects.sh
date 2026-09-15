@@ -31,6 +31,10 @@ REAL_FIX=$(/bin/realpath "$FIX")
 . "$CMAI_PLUGIN_ROOT/lib/denylist.sh"
 . "$CMAI_PLUGIN_ROOT/lib/guard.sh"
 . "$CMAI_PLUGIN_ROOT/lib/measure.sh"
+# cmai_git_probe lives here. Without it CMAI_GIT_OK stays "unknown" and the
+# tracked-source check fails closed, protecting every fixture inside a repo --
+# correct behaviour, but it would mask what these tests are actually checking.
+. "$CMAI_PLUGIN_ROOT/lib/preflight.sh"
 . "$CMAI_PLUGIN_ROOT/lib/scan.sh"
 . "$CMAI_PLUGIN_ROOT/lib/scan_projects.sh"
 

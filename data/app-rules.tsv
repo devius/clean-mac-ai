@@ -12,9 +12,23 @@
 com.spotify.client	risky	Spotify stores offline downloads inside its cache directory. Removing this deletes music you saved for offline listening, which must then be re-downloaded.
 com.apple.bird	risky	iCloud Drive's local file provider state. Removing it can force a full re-sync and evict local copies.
 com.apple.CloudDocs	risky	iCloud Documents state; removing it can trigger a full re-download.
-Adobe	review	Adobe keeps media cache and previews here; removing them forces lengthy re-rendering of video previews.
+com.adobe.	review	Adobe keeps media cache and previews here; removing them forces lengthy re-rendering of video previews.
 com.apple.Photos	risky	Photos-managed caches; manage these through Photos rather than by deletion.
-Steam	review	Steam keeps shader caches and partial downloads alongside game data.
+com.valvesoftware.steam	review	Steam keeps shader caches and partial downloads alongside game data.
 com.docker.docker	risky	Docker Desktop's VM disk image lives here. Use docker's own prune commands instead.
 dev.kdrag0n.MacVirt	risky	OrbStack VM data. Use OrbStack or docker prune commands rather than deleting files.
 com.microsoft.OneDrive	risky	OneDrive local state; removing it can force a full re-sync.
+
+# Sync clients and virtual machines. These are the Spotify case for people who
+# use different software: a directory named "cache" that actually holds either
+# the only local copy of a file or a live VM disk. Every row here is a fact
+# about that application, and a row for software you do not have simply never
+# fires.
+com.getdropbox.dropbox	risky	Dropbox's local state and cache. Removing it forces a full re-sync and can evict local copies of files that are only stored online.
+com.google.GoogleDrive	risky	Google Drive's local state. Removing it forces a full re-sync and can evict locally available files.
+com.google.drivefs	risky	Google Drive File Stream content cache. This holds the local copies of files marked available offline.
+com.parallels.	risky	Parallels virtual machine data. These are live VM disks, not a cache.
+com.utmapp.UTM	risky	UTM virtual machine data. These are live VM disks, not a cache.
+com.vmware.fusion	risky	VMware Fusion virtual machine data. These are live VM disks, not a cache.
+com.adobe.ccx	risky	Adobe Creative Cloud keeps synced libraries and assets here, not only cache.
+com.backblaze	risky	Backblaze keeps backup state here; removing it can force a full re-scan of the backup set.

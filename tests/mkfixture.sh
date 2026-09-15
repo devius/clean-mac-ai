@@ -41,7 +41,9 @@ FIX=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cmai-fixture.XXXXXX")
 /bin/ln "$FIX/hard/a/big" "$FIX/hard/b/big-link"
 
 # sparse file: allocated (%b) must differ sharply from logical (%z)
-/usr/bin/mkfile -n 64m "$FIX/sparse" 2>/dev/null || :
+# /usr/sbin, not /usr/bin. With the wrong path this silently did nothing and
+# the sparse-file assertion below had never run on any machine.
+/usr/sbin/mkfile -n 64m "$FIX/sparse" 2>/dev/null || :
 
 # nested candidates: must de-nest to one
 /bin/mkdir -p "$FIX/nest/inner/deeper"

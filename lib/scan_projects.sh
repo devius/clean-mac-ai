@@ -113,7 +113,7 @@ _cmai_proj_phase0() {
         if (index(p, home "/Library/") == 1) next
         n = split(p, a, "/"); if (n - 1 < 3) next
         print p }' \
-  | $SORT -u > "$W/cwd.txt" 2>/dev/null || : > "$W/cwd.txt"
+  | LC_ALL=C $SORT -u > "$W/cwd.txt" 2>/dev/null || : > "$W/cwd.txt"
 
   # JetBrains records a real epoch-millisecond timestamp for when a project was
   # last focused. That is the highest-quality "last worked on" signal available
@@ -145,9 +145,17 @@ _cmai_proj_phase0() {
   # This list is MRU RANK ONLY -- it carries no timestamps. Deriving a date from
   # a rank would be exactly the invented number this project exists to avoid, so
   # it contributes a boolean and nothing more.
+  # Every VS Code derivative uses the same schema under its own application
+  # directory, so the "won't touch a project you're working on" guarantee holds
+  # for people who do not use stock VS Code. Cursor in particular is common
+  # enough that omitting it silently weakened the protection for those users.
   : > "$W/vscode.txt"
   for db in "$HOME/.vscode-shared/sharedStorage/state.vscdb" \
-            "$HOME/Library/Application Support/Code/User/globalStorage/state.vscdb"; do
+            "$HOME/Library/Application Support/Code/User/globalStorage/state.vscdb" \
+            "$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb" \
+            "$HOME/Library/Application Support/VSCodium/User/globalStorage/state.vscdb" \
+            "$HOME/Library/Application Support/Code - Insiders/User/globalStorage/state.vscdb" \
+            "$HOME/Library/Application Support/Windsurf/User/globalStorage/state.vscdb"; do
     [ -f "$db" ] || continue
     $SQLITE3 "file:$db?immutable=1" \
       "select value from ItemTable where key='history.recentlyOpenedPathsList';" 2>/dev/null \
@@ -155,7 +163,7 @@ _cmai_proj_phase0() {
     | $SED -n 's|.*"folderUri":"file://\([^"]*\)".*|\1|p' \
     | $AWK 'NR <= 10 { print }' >> "$W/vscode.txt" 2>/dev/null || :
   done
-  $SORT -u "$W/vscode.txt" > "$W/vscode.sorted" 2>/dev/null || : > "$W/vscode.sorted"
+  LC_ALL=C $SORT -u "$W/vscode.txt" > "$W/vscode.sorted" 2>/dev/null || : > "$W/vscode.sorted"
   return 0
 }
 
@@ -262,11 +270,19 @@ EOF
 # Is the artifact tracked in git? Then it is source, and this is a hard stop.
 # Composer and Go projects commit vendor/ deliberately, and libraries commit
 # dist/. Without this check a plausible-looking rule deletes committed code.
+#
+# This FAILS CLOSED. `git ls-files` exiting non-zero means "not tracked" only
+# when git actually ran; if git is missing or is the Xcode Command Line Tools
+# stub, the same non-zero result would read as "safe to delete" and the hard
+# stop would silently stop protecting anything. So when git is unusable, every
+# path inside a repository is treated as tracked: we cannot prove otherwise,
+# and the whole point of the check is to not guess about someone's source.
 _cmai_proj_tracked() {
   local root="$1" art="$2" rel
   [ -d "$root/.git" ] || [ -f "$root/.git" ] || return 1
   rel=${art#"$root"/}
   [ "$rel" = "$art" ] && return 1
+  [ "${CMAI_GIT_OK:-unknown}" = yes ] || return 0
   $GIT -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1
 }
 
@@ -294,6 +310,8 @@ cmai_scan_projects() {
 
   minb="${CMAI_PROJ_MIN}"
   [ -n "${OPT_MINSIZE:-}" ] && minb=$(cmai_to_bytes "$OPT_MINSIZE")
+
+  [ "${CMAI_GIT_OK:-unknown}" = unknown ] && cmai_git_probe >/dev/null
 
   W=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cmai-proj.XXXXXX") || return 0
   CMAI_PROJ_W="$W"
@@ -360,8 +378,13 @@ EOF
 
     # --- V3: tracked in git means it is source. No flag overrides this. -----
     if _cmai_proj_tracked "$proot" "$art"; then
+      if [ "${CMAI_GIT_OK:-unknown}" = yes ]; then
+        note="This directory is tracked in git, so it is source rather than build output. Refused at any age."
+      else
+        note="Inside a git repository, but git is not usable on this machine, so whether this is committed source cannot be checked. Protected rather than guessed at. Install the Xcode Command Line Tools with: xcode-select --install"
+      fi
       cmai_emit dev "$sub" "$art" risky report irreversible "$($BASENAME "$proot")" \
-        "This directory is tracked in git, so it is source rather than build output. Refused at any age." info "$bytes"
+        "$note" info "$bytes"
       continue
     fi
 

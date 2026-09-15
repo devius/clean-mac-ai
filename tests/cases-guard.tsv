@@ -24,13 +24,20 @@ $HOME/Library	20	none	-
 $HOME/Library/Containers	20	none	-
 $HOME/Library/Group Containers	20	none	-
 $HOME/Library/Keychains	20	none	-
-$HOME/Library/Mobile Documents	20	none	-
+# Asserted in tests/test_denylist.sh instead: ~/Library/Mobile Documents does
+# not exist on a Mac that has never been signed into iCloud, and guard_path
+# returns E_ENOENT before any rule is consulted.
 # ---- fixture edge cases ----
 # A symlink is unlinked as itself, never followed, so one pointing at /System
 # is refused by default-deny rather than by escape detection. Either way: denied.
 $FIX/symlink-to-system	20	none	E_NORULE
 $FIX/locked-file	20	none	E_SIP
-/usr/local/bin	20	none	E_PARENT_SUNLNK
+# /usr/local is OS-provided (pkgid com.apple.files.data-template) and its
+# parent /usr is restricted, so this holds on any Mac. The previous row used
+# /usr/local/bin, which only exists once something creates it -- on the
+# author's machine, macFUSE -- and returned E_ENOENT elsewhere. Same bug as
+# the $HOME/Development row fixed in a875baa.
+/usr/local	20	none	E_PARENT_SUNLNK
 $FIX/does-not-exist	20	none	E_ENOENT
 # $TMPDIR resolves under /private/var/folders, which is an explicit deny. That
 # the fixture itself is refused is the correct outcome, and it is why reclaim

@@ -97,8 +97,10 @@ build output.
 ### Rule precedence (`lib/denylist.sh`)
 
 Deny and allow are evaluated **independently**, then combined. A permissive rule
-wins only when it is a *strictly longer prefix* than the matching deny — that is
-what carves `/usr/local` out of `/usr`. Naive "longest match wins" would be a
+wins only when it is a *strictly longer prefix* than the matching deny. No
+shipped rule relies on that today — `/usr/local` used to be the carve-out and
+is now denied in its own right — so the branch is covered by a fixture table in
+`tests/test_denylist.sh`. Naive "longest match wins" would be a
 vulnerability, since `*/node_modules` is 15 characters and `/System` is 7.
 
 `ALLOWNAME`/`ASKNAME` match a basename anywhere and carry length 0, so they can
