@@ -67,6 +67,9 @@ it is.
 "${CLAUDE_PLUGIN_ROOT}/bin/cmai" apply --ids <id,id,...> --apply    # do it
 ```
 
+A list of ids is a batch, and `ASK` rows in a batch are skipped. Apply each
+approved `ASK` row on its own, one id per call.
+
 Then report the measured result and, if anything was trashed, tell the user
 plainly that the space returns when they empty the Trash - not before.
 

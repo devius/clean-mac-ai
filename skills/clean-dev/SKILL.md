@@ -129,6 +129,9 @@ resolve the ids rather than all of them:
 "${CLAUDE_PLUGIN_ROOT}/bin/cmai" apply --ids <ids> --from projects --apply
 ```
 
+A list of ids is a batch, and rows the rule table marks `ASK` are skipped in a
+batch. Apply each approved `ASK` row on its own, one id per call.
+
 Each collector is timed with a `df` sample around it, so the report says what
 each one actually returned rather than what it claimed.
 

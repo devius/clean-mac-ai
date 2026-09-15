@@ -310,7 +310,13 @@ cmai_scan_agents() {
 # Kept out of the command substitution below on purpose: bash 3.2 mis-parses a
 # case statement inside $(...), because the ) closing each pattern is mistaken
 # for the end of the substitution.
-_cmai_scan_run() {
+#
+# Ids are path hashes, so a path matched by two catalog rows (an old installer
+# is both downloads-stale and installer-dmg) would appear twice under one id and
+# be acted on twice. First row wins; catalog order puts the specific row first.
+_cmai_scan_run() { _cmai_scan_targets "$1" | $AWK -F'\t' '!seen[$1]++'; }
+
+_cmai_scan_targets() {
   case "$1" in
     space)  cmai_scan_space ;;
     dev)      cmai_scan_dev ;;

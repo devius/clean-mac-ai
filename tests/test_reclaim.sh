@@ -23,6 +23,7 @@ REAL_WORK=$(/bin/realpath "$WORK")
   printf 'ALLOW\t%s/allowed\t3\tself\tsandbox: removable\n'          "$REAL_WORK"
   printf 'CHILDREN\t%s/keepdir\t3\tchildren\tsandbox: contents only\n' "$REAL_WORK"
   printf 'DENY\t%s/protected\t0\tnone\tsandbox: protected\n'         "$REAL_WORK"
+  printf 'ASK\t%s/askdir\t3\tself\tsandbox: per-item only\n'          "$REAL_WORK"
 } > "$CMAI_DENYLIST"
 
 . "$CMAI_PLUGIN_ROOT/lib/common.sh"
@@ -43,6 +44,7 @@ mkfile "$WORK/allowed/a.bin"
 mkfile "$WORK/protected/keepme.bin"
 mkfile "$WORK/keepdir/c1.bin"
 mkfile "$WORK/keepdir/c2.bin"
+mkfile "$WORK/askdir/q.bin"
 
 cmai_manifest_open >/dev/null
 
@@ -53,6 +55,14 @@ CMAI_DRY_RUN=1 cmai_reclaim_one "$WORK/allowed/a.bin" self test >/dev/null
 # --- a denied path is never removed ----------------------------------------
 CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/protected/keepme.bin" self test >/dev/null
 [ -f "$WORK/protected/keepme.bin" ]; ck "denied path survives an apply" $?
+
+# --- ASK acts only when individually confirmed -----------------------------
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/askdir/q.bin" self test >/dev/null
+[ -f "$WORK/askdir/q.bin" ]; ck "unconfirmed ASK path survives an apply" $?
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/askdir/q.bin" self test 1 >/dev/null
+[ ! -e "$WORK/askdir/q.bin" ]; ck "confirmed ASK path was moved" $?
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/protected/keepme.bin" self test 1 >/dev/null
+[ -f "$WORK/protected/keepme.bin" ]; ck "confirmation never overrides DENY" $?
 
 # --- apply moves the file to quarantine ------------------------------------
 CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/allowed/a.bin" self test >/dev/null

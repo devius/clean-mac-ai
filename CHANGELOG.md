@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a rule-table `ASK` path could never be reclaimed, even when named alone.
+  `apply --ids` with a single id now counts as individual confirmation; a list
+  still skips `ASK` rows, and the guard's live-state checks still refuse.
+- Fix: a path matched by two catalog rows (an old installer in Downloads) was
+  emitted twice under one id and acted on twice. Scans now dedupe by id.
+
 ## 0.2.0 - 2026-09-15
 
 - `cmai scan projects`: build and dependency directories inside your own
