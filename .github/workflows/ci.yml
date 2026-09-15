@@ -7,7 +7,19 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    # The claim is "macOS 15 or newer", on any Mac. Until this matrix existed,
+    # CI ran only macos-latest -- which is now macos-26-arm64, the same OS and
+    # architecture as the author's machine, so it verified nothing the developer
+    # had not already run locally. macOS 15 and Intel had never executed this
+    # code at all.
+    #
+    # GitHub retires its last x86_64 image in August 2027. If Intel support is
+    # still claimed then, these jobs need a replacement.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel, macos-26, macos-26-intel]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -17,27 +29,60 @@ jobs:
       - name: Report environment
         run: |
           sw_vers
+          uname -m
           /bin/bash --version | head -1
-          echo "trash: $(command -v trash || echo absent)"
-          echo "jq:    $(command -v jq    || echo absent)"
+          echo "trash:    $(command -v trash    || echo absent)"
+          echo "jq:       $(command -v jq       || echo absent)"
+          echo "realpath: $(command -v realpath || echo absent)"
 
       - name: Lint and test
-        # GitHub's macOS runners lag the current release, and preflight
-        # deliberately refuses to run below macOS 15. The gate is skipped here
-        # only so the suite can run; nothing else is relaxed.
-        env:
-          CMAI_SKIP_OS_GATE: "1"
+        # The OS gate is deliberately NOT skipped. Every runner in this matrix
+        # is macOS 15 or newer, so the gate must pass on its own; skipping it
+        # would suppress the one signal that catches a gate regression.
         run: tests/run.sh
 
+      - name: Test suite under a comma-decimal locale
+        # awk's printf honours LC_NUMERIC. This is the check that catches a
+        # size formatted as "1,0 KB" or a --min threshold parsed as two thirds
+        # of what was asked for.
+        run: LC_ALL=de_DE.UTF-8 tests/run.sh
+
       - name: Verify the tool runs read-only
-        env:
-          CMAI_SKIP_OS_GATE: "1"
         run: |
           ./bin/cmai --help
-          ./bin/cmai doctor || true
+          ./bin/cmai preflight
+          ./bin/cmai doctor
           ./bin/cmai myths | head -20
+
+      - name: The guard must behave identically on both architectures
+        # /usr/local is Homebrew's prefix on Intel and /opt/homebrew is its
+        # prefix on Apple Silicon. Both must be refused, on both machines, or
+        # default-deny varies with the chip.
+        run: |
+          set -e
+          for p in /usr/local/Cellar/x /opt/homebrew/Cellar/x /opt/local/lib/node_modules; do
+            v=$(CMAI_PLUGIN_ROOT=$PWD /bin/bash -c '
+              . lib/common.sh; . lib/denylist.sh
+              _guard_eval_rules "'"$p"'"; printf "%s" "$_GR_VERDICT"')
+            echo "$p -> $v"
+            [ "$v" = DENY ] || { echo "EXPECTED DENY"; exit 1; }
+          done
 
       - name: Validate plugin manifests
         run: |
           jq empty .claude-plugin/plugin.json
           jq empty .claude-plugin/marketplace.json
+
+  floor:
+    # The version floor is a feature, so it is tested as one: on a release below
+    # the floor, preflight must REFUSE rather than run.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: preflight must refuse macOS 14
+        run: |
+          sw_vers -productVersion
+          if ./bin/cmai preflight; then
+            echo "preflight accepted a macOS below the supported floor"; exit 1
+          fi
+          echo "refused, as it should"

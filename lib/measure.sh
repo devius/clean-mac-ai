@@ -37,14 +37,45 @@ cmai_size_fast() {
 
 # cmai_denest -- read paths on stdin, drop any that live inside another.
 #
-# `du -c a a/b` counts a/b twice. Any total built from overlapping candidates is
-# wrong, so overlaps are removed before anything is summed or shown.
-# Lexical sort puts a parent immediately before its descendants.
+# `du -c a a/b` counts a/b twice, and `du -c a a` counts a twice. Any total
+# built from overlapping candidates is wrong, so overlaps and duplicates are
+# removed before anything is summed or shown.
+#
+# A byte sort puts a parent before every one of its descendants -- a proper
+# prefix always compares less -- but NOT immediately before them. That is what
+# broke the previous version of this function: `-` is 0x2d and `/` is 0x2f, so
+# `/x/a-b` sorts BETWEEN `/x/a` and `/x/a/b`, the single-keep loop forgot
+# `/x/a`, and `/x/a/b` was kept and counted a second time. `my-app` next to
+# `my-app.old` is an ordinary pair of directory names, not a contrived one.
+#
+# So adjacency is not relied on at all. Every path already kept is remembered,
+# and each new path is tested against its OWN ancestors: at most one lookup per
+# `/`, so this stays linear in the input bytes after the sort. Correctness then
+# rests only on "a parent is seen first", which the sort does guarantee and no
+# interloper can disturb.
+#
+# Note what is deliberately NOT done: transforming `/` to a lower byte to force
+# contiguity would rewrite the data rather than just the sort key, so a path
+# containing that byte would come back out as a DIFFERENT path. In a tool that
+# feeds guard_path and then a trash operation, inventing a path is worse than
+# double-counting one.
 cmai_denest() {
-  $SORT | $AWK '
-    NR == 1 { keep = $0; print; next }
-    index($0, keep "/") == 1 { next }
-    { keep = $0; print }'
+  LC_ALL=C $SORT -u | $AWK '
+    { while (length($0) > 1 && substr($0, length($0), 1) == "/") $0 = substr($0, 1, length($0) - 1) }
+    $0 == "" || ($0 in kept) { next }
+    {
+      drop = 0
+      n = split($0, c, "/")
+      pfx = c[1]
+      for (i = 2; i <= n; i++) {
+        a = (pfx == "" ? "/" : pfx)
+        if (a in kept) { drop = 1; break }
+        pfx = pfx "/" c[i]
+      }
+      if (drop) next
+      kept[$0] = 1
+      print
+    }'
 }
 
 # cmai_mtime_days <path> -- whole days since last modification, or -1.

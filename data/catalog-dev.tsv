@@ -40,3 +40,11 @@ puppeteer	puppeteer-browsers	~/.cache/puppeteer	trash	rebuildable	Puppeteer brow
 electron	electron-cache	~/Library/Caches/electron	trash	rebuildable	Electron binary downloads.
 jetbrains	jetbrains-caches	~/Library/Caches/JetBrains	trash	rebuildable	JetBrains IDE indexes and caches, kept per IDE version. Old versions accumulate.
 vscode	vscode-cached-data	~/Library/Application Support/Code/CachedData	trash	rebuildable	VS Code cached extension and runtime data.
+cursor	cursor-cached-data	~/Library/Application Support/Cursor/CachedData	trash	rebuildable	Cursor cached extension and runtime data.
+zed	zed-cache	~/Library/Caches/dev.zed.Zed	trash	rebuildable	Zed editor cache.
+androidstudio	android-studio-caches	~/Library/Caches/Google/AndroidStudio	trash	rebuildable	Android Studio indexes and caches, kept per version. Old versions accumulate.
+android	android-avd	~/.android/cache	trash	rebuildable	Android SDK download cache.
+flutter	pub-cache	~/.pub-cache	trash	rebuildable	Dart and Flutter package cache; re-downloaded by `flutter pub get`.
+nvm	nvm-cache	~/.nvm/.cache	trash	rebuildable	nvm download cache for Node tarballs.
+sdkman	sdkman-archives	~/.sdkman/archives	trash	rebuildable	SDKMAN downloaded archives; re-downloadable.
+deno	deno-cache	~/Library/Caches/deno	trash	rebuildable	Deno module and build cache.

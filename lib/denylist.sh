@@ -10,7 +10,9 @@
 #   1. find the longest DENY prefix (or any DENY glob) that matches
 #   2. find the longest permissive prefix (ALLOW / ASK / CHILDREN) that matches
 #   3. a permissive rule wins only if it is strictly MORE specific -- a longer
-#      prefix -- than the deny. This is what carves /usr/local out of /usr.
+#      prefix -- than the deny. No shipped rule relies on this today:
+#      /usr/local used to be the carve-out and is now denied in its own
+#      right, so the branch is covered by a fixture in tests/test_denylist.sh.
 #   4. name rules (ALLOWNAME / ASKNAME) match a basename anywhere and carry
 #      length 0, so they can never override any deny. They exist so build
 #      artifacts can be reclaimed wherever a project happens to live.

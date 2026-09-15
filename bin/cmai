@@ -145,6 +145,7 @@ case "$VERB" in
     ;;
 
   restore)
+    cmai_os_gate
     [ -n "$OPT_RUN" ] || cmai_die "restore needs --run <runid>"
     cmai_manifest_open >/dev/null
     cmai_restore_run "$OPT_RUN" "$([ "$CMAI_DRY_RUN" = 0 ] && printf 1 || printf 0)"

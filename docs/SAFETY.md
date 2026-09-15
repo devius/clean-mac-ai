@@ -68,7 +68,9 @@ Deny and allow are evaluated independently, then combined:
 1. Longest matching `DENY` prefix, or any `DENY` glob.
 2. Longest matching permissive prefix (`ALLOW` / `ASK` / `CHILDREN`).
 3. A permissive rule wins **only if it is strictly more specific** - a longer
-   prefix. This is what carves `/usr/local` out of `/usr`.
+   prefix. No shipped rule relies on this today (`/usr/local` used to, and is now
+   denied in its own right), so the branch is covered by a fixture table in
+   `tests/test_denylist.sh` — including an equal-length `ALLOW` that must lose.
 4. Name rules (`ALLOWNAME` / `ASKNAME`) match a basename anywhere and carry
    length zero, so they can never override any deny. A `node_modules` directory
    inside a protected location stays protected.
@@ -107,6 +109,26 @@ swapped.
 
 A cross-device move is refused rather than performed: `mv` across volumes is a
 full copy, which on a large tree consumes space instead of freeing it.
+
+## Two floors that do not live in the rule table
+
+**Package-manager prefixes are denied on every architecture.** `/usr/local`
+(Intel Homebrew), `/opt/homebrew` (Apple Silicon Homebrew) and `/opt/local`
+(MacPorts) are all denied by name. Denying `/usr/local` explicitly, rather than
+letting it fall through to the `/usr` rule, is what keeps the verdict identical
+on both chips: before this, the entire live Homebrew install was `ALLOW` on
+Intel and default-denied on Apple Silicon, so default-deny varied with the
+hardware. Homebrew chowns those directories to the invoking user, which defeats
+the root-ownership `ASK`, and `sunlnk` on `/usr/local` only protects its direct
+children.
+
+**The tracked-source check fails closed.** `git ls-files` exiting non-zero means
+"not tracked" only when git actually ran. `/usr/bin/git` is a Command Line Tools
+stub, so on a Mac without them the same non-zero result would read as "safe to
+delete" and the hard stop would silently stop protecting committed code. When
+git is unusable, everything inside a repository is therefore treated as tracked.
+`preflight` and `doctor` both report git's state, distinguishing absent from
+present-but-a-stub.
 
 ## What cannot be tested locally
 

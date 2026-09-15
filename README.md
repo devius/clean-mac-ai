@@ -103,10 +103,10 @@ age, since that makes it source rather than output. Drop an empty `.cmaikeep` in
 a project to exclude it permanently.
 
 **It knows your machine, not just your directories.** The scan is input to
-reasoning, not the output. Instead of "Caches: 8.5 GB" you get: your
-`ms-playwright` cache is 849 MB of browser binaries that re-download on the next
-test run; that launch daemon points at a kext-era VPN driver that cannot load on
-Apple Silicon and is pure residue.
+reasoning, not the output. Instead of "Caches: 8.5 GB" you get the kind of thing
+a person would say: this cache is browser binaries your test runner will
+re-download the moment you need them; that launch daemon points at a driver that
+cannot load on this architecture at all, so it is pure residue.
 
 **Everything is undoable, and it says when it is not.** Every run writes an
 append-only manifest classing each action `full`, `rebuildable` or
@@ -125,6 +125,11 @@ before they run, not after.
   send anything. Also enforced by lint.
 - **Dry-run by default.** Nothing changes without an explicit `--apply`.
 - **Re-checked at the moment of action**, not only at scan time.
+
+**External volumes are reported, never reclaimed.** `/Volumes` is denied
+outright, so a full external drive shows you where the space went and nothing
+more. Removing files across a volume boundary is a copy, not a move, and the
+undo story is weaker there.
 
 Never touched, at all: `/System`, `/usr`, `/bin`, `/sbin`, `/private/var/db`,
 swap and the sleep image, Keychains, `~/.ssh`, `~/Library/Group Containers`

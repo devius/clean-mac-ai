@@ -32,6 +32,37 @@ d2=$(printf '%s\n%s\n' "$FIX/nest" "$FIX/hard" | cmai_denest | wc -l | tr -d ' '
 d3=$(printf '%s\n%s\n' "/tmp/foo" "/tmp/foobar" | cmai_denest | wc -l | tr -d ' ')
 [ "$d3" = 2 ]; ck "denest does not treat /tmp/foobar as inside /tmp/foo (got $d3)" $?
 
+# --- denest: adjacency cannot be assumed -------------------------------------
+# `-` is 0x2d and `/` is 0x2f, so /x/a-b sorts BETWEEN /x/a and /x/a/b. The
+# previous single-keep implementation forgot /x/a at that point and emitted
+# /x/a/b, double-counting it in every total. my-app next to my-app.old is an
+# ordinary pair of names, not a contrived one.
+d4=$(printf '%s\n' /x/a /x/a-b /x/a/b /x/ab | cmai_denest | /usr/bin/tr '\n' ' ')
+[ "$d4" = "/x/a /x/a-b /x/ab " ]; ck "denest survives an interloping sibling (got '$d4')" $?
+
+d5=$(printf '%s\n' /x/a /x/a /x/a/b | cmai_denest | wc -l | tr -d ' ')
+[ "$d5" = 1 ]; ck "denest collapses duplicates (got $d5)" $?
+
+d6=$(printf '%s\n' /a/b/node /a/b/node_modules /a/b/node/deep | cmai_denest | wc -l | tr -d ' ')
+[ "$d6" = 2 ]; ck "denest keeps node and node_modules, drops node/deep (got $d6)" $?
+
+# Spaces sort below '/' too, so this is the same trap with a realistic name.
+d7=$(printf '%s\n' "/u/My Docs" "/u/My Docs/sub" "/u/My Docs Extra" | cmai_denest | wc -l | tr -d ' ')
+[ "$d7" = 2 ]; ck "denest handles spaces in paths (got $d7)" $?
+
+d8=$(printf '' | cmai_denest | wc -l | tr -d ' ')
+[ "$d8" = 0 ]; ck "denest on empty input emits nothing (got $d8)" $?
+
+d9=$(printf '%s\n' /x/a/ /x/a/b /x/a | cmai_denest | wc -l | tr -d ' ')
+[ "$d9" = 1 ]; ck "denest normalises a trailing slash (got $d9)" $?
+
+# --- sizes must not depend on the user's locale ------------------------------
+# awk printf honours LC_NUMERIC: without LC_ALL=C this returns "1,0 KB" on a
+# German or French Mac, and cmai_to_bytes parses "1.5G" as 1.0 GiB, silently
+# scanning at two thirds of the requested threshold.
+h_de=$(LC_ALL=de_DE.UTF-8 cmai_human 1024)
+[ "$h_de" = "1.0 KB" ]; ck "cmai_human is locale-independent (got '$h_de')" $?
+
 # --- sparse file: allocated must be far below logical ------------------------
 if [ -f "$FIX/sparse" ]; then
   alloc=$(cmai_size "$FIX/sparse")

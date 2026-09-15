@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+### Portability: made it work on any supported Mac, not only the author's
+
+A pre-release audit found the project had no hardcoded paths or usernames, but
+had absorbed its author's machine in subtler ways.
+
+- **The tracked-source hard stop failed open without Xcode.** `/usr/bin/git` is
+  a Command Line Tools stub; when it cannot run, `git ls-files` exits non-zero
+  and that was read as "not tracked", so a committed `vendor/` or `dist/` became
+  deletable as build output. It now fails closed, and `preflight`/`doctor`
+  report whether git is usable.
+- **The guard was more permissive on Intel.** `ALLOW /usr/local` meant the whole
+  live Homebrew install was `ALLOW` on Intel while the same install was denied
+  on Apple Silicon. All three package-manager prefixes (`/usr/local`,
+  `/opt/homebrew`, `/opt/local`) are now denied by name, so default-deny no
+  longer depends on the chip, and name rules can no longer tunnel into them.
+- **Sizes were locale-dependent.** `awk printf` honours `LC_NUMERIC`, so on a
+  comma-decimal Mac every size read "1,0 KB" and `--min 1.5G` silently scanned
+  at 1.0 GiB. The suite now runs under `de_DE.UTF-8` in CI.
+- **`cmai_denest` double-counted.** It assumed a byte sort puts a parent
+  adjacent to its descendants; `-` sorts before `/`, so `my-app.old` next to
+  `my-app` broke it. Rewritten to test each path against its own ancestors.
+- **A catalog row the guard could never permit.** `ASK ~/Library/Containers`
+  shared the `DENY`'s pattern string, and a permissive rule must be strictly
+  longer, so Mail attachments were offered by the scan and always refused.
+- **`doctor` reported all-green on a dead safety kernel.** Its self-test only
+  asserted refusals, which a broken guard satisfies trivially. It now checks
+  `$REALPATH` and `$GIT`, and asserts one path it must *permit*.
+- **Tests that only passed here.** `cases-guard.tsv` asserted on `/usr/local/bin`
+  (created by macFUSE on the author's machine) and on iCloud's directory;
+  `mkfixture.sh` called `/usr/bin/mkfile`, which is at `/usr/sbin`, so the
+  sparse-file assertion had never run.
+- **CI now tests the claim.** `macos-latest` had become the author's exact OS and
+  architecture. The matrix is `macos-15`, `macos-15-intel`, `macos-26`,
+  `macos-26-intel`, the OS gate is no longer skipped, a `macos-14` job asserts
+  the floor refuses, and the suite runs under a comma-decimal locale.
+- Coverage for other people's software: risky rules for Dropbox, Google Drive,
+  Parallels, UTM, VMware, Creative Cloud and Backblaze; dev caches for Cursor,
+  Zed, Android Studio, `.pub-cache`, `.nvm`, SDKMAN and Deno; and recents read
+  from Cursor, VSCodium, Insiders and Windsurf as well as stock VS Code.
+- `restore` was the only mutating verb with no OS gate. The version is now read
+  from `plugin.json` instead of being duplicated in `lib/common.sh`.
+
 - Fixed: an application exception in `data/app-rules.tsv` now actually gates
   removal. `cmai_emit` lowered the displayed verdict to ASK, but
   `cmai_reclaim_one` consulted only the guard, which is path-lexical and

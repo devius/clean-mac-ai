@@ -205,8 +205,11 @@ cmai_scan_docker() {
 
 # ---------------------------------------------------------------- large files
 # cmai_size_bytes <size-with-suffix> -- 500M -> 524288000
+# LC_ALL=C for the same reason as cmai_human, but the consequence here is worse
+# than cosmetic: under a comma-decimal locale "1.5G" parses as 1.0 GiB, so
+# `--min 1.5G` silently scans at two thirds of the requested threshold.
 cmai_to_bytes() {
-  printf '%s' "$1" | $AWK '
+  printf '%s' "$1" | LC_ALL=C $AWK '
     /[Gg]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1073741824; next }
     /[Mm]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1048576; next }
     /[Kk]$/ { printf "%.0f\n", substr($0,1,length($0)-1)*1024; next }
