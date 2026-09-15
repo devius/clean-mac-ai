@@ -1,6 +1,6 @@
 {
   "name": "clean-mac-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An honest CleanMyMac alternative for Claude Code. Finds where your disk space actually went, reclaims it with each toolchain's own garbage collector, and refuses the maintenance theater that other Mac cleaners sell.",
   "author": {
     "name": "David Machakhelidze",

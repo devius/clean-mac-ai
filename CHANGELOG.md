@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-09-15
 
 - `cmai scan projects`: build and dependency directories inside your own
   projects, discovered across the whole home directory in one pruned traversal.
