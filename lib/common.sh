@@ -72,6 +72,12 @@ CMAI_TAB=$(printf '\t')
 : "${CMAI_DENYLIST:=$CMAI_PLUGIN_ROOT/data/denylist.tsv}"
 : "${CMAI_DATA_DIR:=$CMAI_PLUGIN_ROOT/data}"
 
+# Where app-rules.tsv keys are meaningful. They are bundle-id and vendor
+# fragments, so they only mean anything where a path component genuinely is a
+# bundle id. Overridable so tests can exercise the rules without writing into
+# the real ~/Library.
+: "${CMAI_APPRULE_SCOPE:=$HOME/Library}"
+
 # --- output -----------------------------------------------------------------
 # Diagnostics go to stderr so stdout stays a clean machine-readable stream.
 cmai_is_tty() { [ -t 2 ]; }
@@ -110,6 +116,41 @@ cmai_tsv_safe() { printf '%s' "$1" | LC_ALL=C $TR -d '\000-\037\177'; }
 cmai_ensure_root() {
   $MKDIR -p "$CMAI_ROOT/manifest" "$CMAI_ROOT/quarantine" "$CMAI_ROOT/log" 2>/dev/null || \
     cmai_die "cannot create CMAI_ROOT at $CMAI_ROOT"
+}
+
+# --- application exceptions -------------------------------------------------
+# cmai_app_rule <path> -- prints "risk\tnote" for a matching rule, else nothing.
+#
+# Some applications keep real user data under a name that says "cache".
+# data/app-rules.tsv records those; Spotify's offline downloads are the
+# documented case, and the reason cleaners have proposed deleting people's
+# music libraries.
+#
+# This lives here, and carries its own scoping, because BOTH the scan and the
+# reclaim path must consult it. When the scan lowered a verdict and the reclaim
+# path did not check at all, the warning was displayed and then ignored. One
+# function means the shown verdict and the enforced one cannot drift apart.
+#
+# The scope matters: the match is a substring test, so applied to an arbitrary
+# path it false-fires. A project at ~/Development/AdobeXD-plugin/dist would
+# otherwise match the "Adobe" rule and be described as Adobe's media cache.
+cmai_app_rule() {
+  local p="$1"
+  case "$p" in
+    "$CMAI_APPRULE_SCOPE"/*) ;;
+    *) return 1 ;;
+  esac
+  [ -f "$CMAI_DATA_DIR/app-rules.tsv" ] || return 1
+  $AWK -F'\t' -v path="$p" '
+    !/^#/ && NF >= 3 {
+      if (index(path, $1) > 0) { printf "%s\t%s\n", $2, $3; exit }
+    }' "$CMAI_DATA_DIR/app-rules.tsv"
+}
+
+# True when a path holds real user data despite its name, and so may only be
+# removed when the user names it individually.
+cmai_app_rule_is_risky() {
+  [ "$(cmai_app_rule "$1" | $AWK -F'\t' '{print $1}')" = risky ]
 }
 
 # --- volume helpers ---------------------------------------------------------

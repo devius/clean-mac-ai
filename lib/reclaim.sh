@@ -15,12 +15,13 @@
 # cmai_reclaim_one <path> <mode> [category] [confirmed]
 #   mode: self | children
 #   confirmed: 1 when the user named exactly this item on its own. That is what
-#   ASK means ("confirmed individually"), so only then may a rule-table ASK act.
+#   ASK means ("confirmed individually"), so only then may a rule-table ASK act,
+#   and likewise a path matching a risky rule in data/app-rules.tsv.
 #   The guard's live-state ASKs (E_TCC, E_INUSE, E_NEEDS_ROOT) never act.
 # Returns 0 when handled (including a deliberate skip), 1 on a real failure.
 cmai_reclaim_one() {
   local p="$1" gmode="${2:-self}" cat="${3:--}" confirmed="${4:-0}"
-  local gline grc bytes dest child backend
+  local gline grc bytes dest child backend rp
 
   gline=$(guard_path "$p" reclaim); grc=$?
   if [ "$grc" -eq "$GUARD_ASK" ] && [ "$confirmed" = 1 ]; then
@@ -32,6 +33,23 @@ cmai_reclaim_one() {
   if [ "$grc" -ne 0 ]; then
     cmai_manifest_write SKIP "guard:$grc" "$p" "" 0 - "$gmode" "$cat" \
       "$(printf '%s' "$gline" | $AWK -F'\t' '{print $3}')"
+    return 0
+  fi
+
+  # An application exception means this path holds real user data despite its
+  # name -- Spotify keeps offline downloads under its cache directory. The guard
+  # is path-lexical and cannot know that, so it returns ALLOW; the scan lowers
+  # the displayed verdict to ASK. Enforce the same floor here, or that warning
+  # is printed and then ignored, which is exactly the failure app-rules.tsv was
+  # added to prevent.
+  # Checked against the RESOLVED path the guard returned, not the argument:
+  # otherwise a symlink pointing into a protected directory would sidestep the
+  # rule, and /var vs /private/var alone would defeat the scope test.
+  rp=$(printf '%s' "$gline" | $AWK -F'\t' '{print $4}')
+  [ -n "$rp" ] || rp="$p"
+  if [ "$confirmed" != 1 ] && cmai_app_rule_is_risky "$rp"; then
+    cmai_manifest_write SKIP app-rule "$p" "" 0 - "$gmode" "$cat" \
+      "$(cmai_app_rule "$rp" | $AWK -F'\t' '{print $2}')"
     return 0
   fi
 
