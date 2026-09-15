@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Fixed: an application exception in `data/app-rules.tsv` now actually gates
+  removal. `cmai_emit` lowered the displayed verdict to ASK, but
+  `cmai_reclaim_one` consulted only the guard, which is path-lexical and
+  returns ALLOW for `~/Library/Caches/com.spotify.client`. The row warned that
+  removing it deletes music saved for offline listening, and was then removable
+  with no confirmation at all -- the exact failure app-rules.tsv was added to
+  prevent. A risky rule now requires the same individual confirmation a
+  rule-table ASK does. (#2)
+- `cmai_app_rule` moved to `lib/common.sh` and carries its own scoping, so the
+  scan and the reclaim path cannot drift apart again. The check runs against the
+  path the guard resolved, so a symlink cannot sidestep a rule.
+- `CMAI_APPRULE_SCOPE` test seam, so the gate is testable without writing into
+  the real `~/Library`.
+
+## Unreleased
+
 - Fix: a rule-table `ASK` path could never be reclaimed, even when named alone.
   `apply --ids` with a single id now counts as individual confirmation; a list
   still skips `ASK` rows, and the guard's live-state checks still refuse.

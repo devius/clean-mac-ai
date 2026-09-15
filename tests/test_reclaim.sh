@@ -26,6 +26,16 @@ REAL_WORK=$(/bin/realpath "$WORK")
   printf 'ASK\t%s/askdir\t3\tself\tsandbox: per-item only\n'          "$REAL_WORK"
 } > "$CMAI_DENYLIST"
 
+# app-rules.tsv keys only mean anything inside this scope. Pointing it at the
+# sandbox lets the gate be tested without touching the real ~/Library.
+export CMAI_APPRULE_SCOPE="$REAL_WORK"
+export CMAI_DATA_DIR="$SANDBOX/data"
+/bin/mkdir -p "$CMAI_DATA_DIR"
+{
+  printf 'sandbox.risky\trisky\tHolds real user data despite the name.\n'
+  printf 'sandbox.review\treview\tWorth a look, but not gated.\n'
+} > "$CMAI_DATA_DIR/app-rules.tsv"
+
 . "$CMAI_PLUGIN_ROOT/lib/common.sh"
 . "$CMAI_PLUGIN_ROOT/lib/denylist.sh"
 . "$CMAI_PLUGIN_ROOT/lib/guard.sh"
@@ -45,6 +55,8 @@ mkfile "$WORK/protected/keepme.bin"
 mkfile "$WORK/keepdir/c1.bin"
 mkfile "$WORK/keepdir/c2.bin"
 mkfile "$WORK/askdir/q.bin"
+mkfile "$WORK/allowed/sandbox.risky.bin"
+mkfile "$WORK/allowed/sandbox.review.bin"
 
 cmai_manifest_open >/dev/null
 
@@ -63,6 +75,30 @@ CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/askdir/q.bin" self test 1 >/dev/null
 [ ! -e "$WORK/askdir/q.bin" ]; ck "confirmed ASK path was moved" $?
 CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/protected/keepme.bin" self test 1 >/dev/null
 [ -f "$WORK/protected/keepme.bin" ]; ck "confirmation never overrides DENY" $?
+
+# --- an app rule gates a path the guard would otherwise allow ---------------
+# The guard is path-lexical and returns ALLOW for these; app-rules.tsv is what
+# knows the directory holds real user data. Before this gate the scan displayed
+# the warning and the reclaim path ignored it.
+guard_path "$WORK/allowed/sandbox.risky.bin" test >/dev/null 2>&1
+[ $? -eq "$GUARD_ALLOW" ]; ck "guard alone allows the risky path" $?
+
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/allowed/sandbox.risky.bin" self test >/dev/null
+[ -f "$WORK/allowed/sandbox.risky.bin" ]; ck "unconfirmed risky path survives an apply" $?
+/usr/bin/grep -q 'app-rule' "$CMAI_MANIFEST"; ck "  and the manifest records why" $?
+
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/allowed/sandbox.risky.bin" self test 1 >/dev/null
+[ ! -e "$WORK/allowed/sandbox.risky.bin" ]; ck "confirmed risky path was moved" $?
+
+# `review` is informational; only `risky` gates.
+CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/allowed/sandbox.review.bin" self test >/dev/null
+[ ! -e "$WORK/allowed/sandbox.review.bin" ]; ck "a review-level rule does not gate" $?
+
+# The scan and the reclaim path must agree, or the warning is theatre again.
+[ "$(cmai_app_rule "$REAL_WORK/allowed/sandbox.risky.bin" | $AWK -F'\t' '{print $1}')" = risky ]
+ck "cmai_app_rule matches inside the scope" $?
+[ -z "$(cmai_app_rule "/tmp/sandbox.risky.bin" 2>/dev/null)" ]
+ck "and does not match outside it (no false fire on project paths)" $?
 
 # --- apply moves the file to quarantine ------------------------------------
 CMAI_DRY_RUN=0 cmai_reclaim_one "$WORK/allowed/a.bin" self test >/dev/null

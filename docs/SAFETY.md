@@ -45,6 +45,18 @@ Checks run in this order:
 13. **Root-owned paths return ASK with a printed command.** The tool never
     escalates privileges to delete.
 
+Two floors sit above the guard, because the guard is deliberately path-lexical
+and cannot know what an application keeps where:
+
+- **Application exceptions.** A path matching a `risky` rule in
+  `data/app-rules.tsv` requires individual confirmation even when the guard
+  allows it. Spotify keeps offline downloads under its cache directory, and a
+  cleaner that treats that as junk deletes someone's music. The scan and the
+  reclaim path call the same `cmai_app_rule`, so what is displayed is what is
+  enforced.
+- **Risk downgrades from the scan.** `risky` never raises a verdict, only
+  lowers it. A DENY is never softened.
+
 **The last line is default-deny.** A path matching no rule is refused. Every
 reclaimable location must be explicitly named in `data/denylist.tsv`. Adding a
 new category means adding a rule and a test, deliberately.

@@ -35,15 +35,12 @@ cmai_emit() {
 
   # An application exception downgrades the risk and replaces the explanation:
   # this is where "cache" turns out to mean "the user's offline music".
-  # app-rules.tsv keys are bundle-id and vendor fragments, meaningful only under
-  # ~/Library where a path component genuinely is a bundle id. Applied to an
-  # arbitrary project path the substring match false-fires: a project at
-  # ~/Development/AdobeXD-plugin/dist matches the "Adobe" rule and would be
-  # described to the user as Adobe's media cache.
+  # An application exception downgrades the risk and replaces the explanation:
+  # this is where "cache" turns out to mean "the user's offline music".
+  # cmai_app_rule carries its own scoping, and lib/reclaim.sh consults the same
+  # function, so what is shown here is what is actually enforced.
   local rule="" rrisk rnote
-  case "$path" in
-    "$HOME"/Library/*) rule=$(cmai_app_rule "$path") ;;
-  esac
+  rule=$(cmai_app_rule "$path") || rule=""
   if [ -n "$rule" ]; then
     rrisk=$(printf '%s' "$rule" | $AWK -F'\t' '{print $1}')
     rnote=$(printf '%s' "$rule" | $AWK -F'\t' '{print $2}')
@@ -110,18 +107,6 @@ cmai_is_dev_path() {
 $list
 EOF
   return 1
-}
-
-# Per-application exception lookup. Returns the note, or nothing.
-# Some applications keep real user data under a "cache" name; app-rules.tsv
-# records those so the scan can say so instead of calling it junk.
-cmai_app_rule() {
-  local p="$1"
-  [ -f "$CMAI_DATA_DIR/app-rules.tsv" ] || return 1
-  $AWK -F'\t' -v path="$p" '
-    !/^#/ && NF >= 3 {
-      if (index(path, $1) > 0) { printf "%s\t%s\n", $2, $3; exit }
-    }' "$CMAI_DATA_DIR/app-rules.tsv"
 }
 
 # Turn one catalog row into the actual candidate paths.
