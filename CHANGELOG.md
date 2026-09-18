@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-09-19
 
 ### Portability: made it work on any supported Mac, not only the author's
 
@@ -44,6 +44,8 @@ had absorbed its author's machine in subtler ways.
 - `restore` was the only mutating verb with no OS gate. The version is now read
   from `plugin.json` instead of being duplicated in `lib/common.sh`.
 
+### App exceptions enforced at reclaim time (#3)
+
 - Fixed: an application exception in `data/app-rules.tsv` now actually gates
   removal. `cmai_emit` lowered the displayed verdict to ASK, but
   `cmai_reclaim_one` consulted only the guard, which is path-lexical and
@@ -58,7 +60,7 @@ had absorbed its author's machine in subtler ways.
 - `CMAI_APPRULE_SCOPE` test seam, so the gate is testable without writing into
   the real `~/Library`.
 
-## Unreleased
+### Confirmation and duplicate ids (#1)
 
 - Fix: a rule-table `ASK` path could never be reclaimed, even when named alone.
   `apply --ids` with a single id now counts as individual confirmation; a list
